@@ -20,5 +20,8 @@ jobs:
       - name: Setup Python environment
         uses: ./.github/actions/setup-python
 
+      - name: Install Optional Dependencies
+        run: poetry install --extras "all"
+
       - name: Run Pytest
         run: poetry run pytest
