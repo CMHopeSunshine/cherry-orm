@@ -29,7 +29,6 @@ from .decorator import check_connected
 from pydantic import PrivateAttr
 from pydantic.fields import Field, FieldInfo
 from pydantic.main import BaseModel, ModelMetaclass
-from rich import print as print
 from sqlalchemy import Column, ForeignKey, Table
 from sqlalchemy.sql.elements import ColumnElement
 

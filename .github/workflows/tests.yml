@@ -9,7 +9,7 @@ on:
 
 
 jobs:
-  release:
+  tests:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
