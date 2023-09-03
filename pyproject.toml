@@ -1,0 +1,97 @@
+[tool.poetry]
+name = "cherry-orm"
+version = "0.1.0"
+description = "Python asynchronous ORM based on SQLAlchemy and Pydantic."
+authors = ["CMHopeSunshine <277073121@qq.com>"]
+license = "MIT"
+readme = "README.md"
+packages = [{ include = "cherry" }]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+pydantic = "^1.10.10"
+SQLAlchemy = "^2.0.20"
+aiosqlite = { version = "^0.19.0", optional = true }
+asyncmy = { version = "^0.2.8", optional = true }
+asyncpg = { version = "^0.28.0", optional = true }
+
+[tool.poetry.extras]
+sqlite = ["aiosqlite"]
+mysql = ["asyncmy"]
+postgresql = ["asyncpg"]
+all = ["aiosqlite", "asyncmy", "asyncpg"]
+
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.0.277"
+black = "^23.1.0"
+pre-commit = "^3.1.0"
+
+[tool.poetry.group.test.dependencies]
+pytest = "^7.4.0"
+pytest-asyncio = "^0.21.1"
+
+[tool.poetry.group.docs.dependencies]
+mkdocs-material = "^9.2.7"
+jieba = "^0.42.1"
+
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+
+[tool.black]
+line-length = 88
+include = '\.pyi?$'
+extend-exclude = '''
+'''
+skip-string-normalization = true
+target-version = ["py38", "py39", "py310", "py311"]
+
+[tool.ruff]
+select = [
+    "E",
+    "W",     # pycodestyle
+    "F",     # pyflakes
+    "UP",    # pyupgrade
+    "I",     # isort
+    "PYI",   # flask8-pyi
+    "Q",     # flake8-quotes
+    "PTH",   # flake8-use-pathlib
+    "RSE",   # flake8-raise
+    "T20",   # flake8-print
+    "PIE",   # flake8-pie
+    "SIM",   # flake8-simplify
+    "ISC",   # flake8-implicit-str-concat
+    "C4",    # flake8-comprehensions
+    "COM",   # flake8-commas
+    "B",     # flake8-bugbear
+    "ASYNC", # flake8-async
+]
+ignore = ["E402", "B008", "F403", "F405", "B005", "B905", "F841"]
+line-length = 88
+target-version = "py38"
+ignore-init-module-imports = true
+
+
+[tool.ruff.isort]
+force-sort-within-sections = true
+extra-standard-library = ["typing_extensions"]
+force-wrap-aliases = true
+combine-as-imports = true
+order-by-type = false
+relative-imports-order = "closest-to-furthest"
+section-order = [
+    "future",
+    "standard-library",
+    "first-party",
+    "local-folder",
+    "third-party",
+]
+
+[tool.ruff.pycodestyle]
+ignore-overlong-task-comments = true
+max-doc-length = 120
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -1,0 +1,71 @@
+site_name: Cherry Document
+repo_url: https://github.com/CMHopeSunshine/cherry-orm
+repo_name: CMHopeSunshine/cherry-orm
+plugins:
+  - search
+theme:
+  name: material
+  language: en
+  icon:
+    repo: fontawesome/brands/github
+    annotation: material/star-four-points-circle
+  features:
+    - navigation.footer
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.path
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+  palette:
+    # Palette toggle for automatic mode
+    - media: "(prefers-color-scheme)"
+      primary: red
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      primary: red
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      primary: red
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - pymdownx.highlight:
+      use_pygments: true
+      linenums: true
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+
+
+extra:
+  alternate:
+    - name: 简体中文
+      link: /
+      lang: zh
+    - name: English
+      link: /en/
+      lang: en

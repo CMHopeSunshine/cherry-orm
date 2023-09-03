@@ -1,0 +1,24 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - master
+
+  pull_request:
+
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Python environment
+        uses: ./.github/actions/setup-python
+
+      - name: Run Pytest
+        run: poetry run pytest

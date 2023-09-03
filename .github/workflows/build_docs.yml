@@ -1,0 +1,32 @@
+name: Build Docs
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - v*
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Python environment
+        uses: ./.github/actions/setup-python
+
+      - name: Build site zh
+        run: poetry run mkdocs build -f docs/zh/mkdocs.yml -d ../site/
+
+      - name: Build site en
+        run: poetry run mkdocs build -f docs/en/mkdocs.yml -d ../site/en
+
+      - name: Deploy site to Github Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs/site
+          publish_branch: docs-gh-pages
