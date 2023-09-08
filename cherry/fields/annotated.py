@@ -1,29 +1,24 @@
-from enum import auto, Enum
 from typing import Optional, TypeVar
 from typing_extensions import Annotated
 
-
-class FieldInfoEnum(Enum):
-    primary_key = auto()
-    autoincrement = auto()
-    index = auto()
-    unique = auto()
-
+from .fields import Field, Relationship
 
 T = TypeVar("T")
 
-PrimaryKey = Annotated[T, FieldInfoEnum.primary_key]
-AutoIncrement = Annotated[T, FieldInfoEnum.autoincrement]
+PrimaryKey = Annotated[T, Field(primary_key=True)]
+AutoIncrement = Annotated[T, Field(autoincrement=True)]
 AutoIncrementPrimaryKey = Annotated[
     T,
-    FieldInfoEnum.primary_key,
-    FieldInfoEnum.autoincrement,
+    Field(primary_key=True, autoincrement=True),
 ]
 AutoIncrementIntPrimaryKey = Annotated[
     Optional[int],
-    FieldInfoEnum.primary_key,
-    FieldInfoEnum.autoincrement,
+    Field(primary_key=True, autoincrement=True),
 ]
 
-Index = Annotated[T, FieldInfoEnum.index]
-Unique = Annotated[T, FieldInfoEnum.unique]
+Index = Annotated[T, Field(index=True)]
+Unique = Annotated[T, Field(unique=True)]
+
+ForeignKey = Annotated[T, Relationship(foreign_key=True)]
+ReverseRelated = Annotated[T, Relationship(reverse_related=True)]
+ManyToMany = Annotated[T, Relationship(many_to_many=True)]

@@ -13,23 +13,24 @@ from typing import (
 )
 from typing_extensions import dataclass_transform, Self
 
-from cherry.fields.annotated import FieldInfoEnum
 from cherry.fields.fields import (
     BaseField,
     ForeignKeyField,
-    RelationshipField,
+    ManyToManyField,
+    ReverseRelationshipField,
 )
+from cherry.fields.types import get_sqlalchemy_type_from_field
 from cherry.meta.meta import init_meta_config, MetaConfig, mix_meta_config
 from cherry.meta.pydantic_config import generate_pydantic_config
 from cherry.queryset.queryset import QuerySet
-from cherry.utils import check_is_list, get_annotated_field_info
+from cherry.utils import check_is_list
 
 from .decorator import check_connected
 
 from pydantic import PrivateAttr
 from pydantic.fields import Field, FieldInfo
 from pydantic.main import BaseModel, ModelMetaclass
-from sqlalchemy import Column, ForeignKey, Table
+from sqlalchemy import Column, ForeignKey, MetaData, Table
 from sqlalchemy.sql.elements import ColumnElement
 
 
@@ -60,104 +61,39 @@ class ModelMeta(ModelMetaclass):
             key: kwargs.pop(key) for key in kwargs.keys() & allowed_meta_kwargs
         }
         attrs["__meta__"] = mix_meta_config(attrs.get("Meta"), meta, **meta_kwargs)
-        annotated_info = {}
-        for ann_name, ann in attrs.get("__annotations__", {}).items():
-            annotated_info[ann_name] = get_annotated_field_info(ann)
 
         new_cls = cast(Type["Model"], super().__new__(cls, name, bases, attrs))
 
         meta_config = new_cls.__meta__
 
-        for field_name, model_field in new_cls.__fields__.items():
+        for _field_name, model_field in new_cls.__fields__.items():
+            if model_field.field_info.__class__ is FieldInfo:
+                model_field.field_info = BaseField.from_base_field_info(
+                    model_field.field_info,
+                )
             field_info = model_field.field_info
-
-            if field_info.__class__ is FieldInfo:
-                field_info = BaseField.from_base_field_info(field_info)
             if isinstance(field_info, BaseField):
-                # TODO: 重新改为Undefine
-                if field_info.name is None:
-                    field_info.name = field_name
-                if field_info.type is None:
-                    field_info.type = model_field.type_
-                if FieldInfoEnum.primary_key in annotated_info[field_name]:
-                    field_info.primary_key = True
-                    field_info.nullable = False
-                if FieldInfoEnum.autoincrement in annotated_info[field_name]:
-                    field_info.autoincrement = True
-                if FieldInfoEnum.index in annotated_info[field_name]:
-                    field_info.index = True
-                if FieldInfoEnum.unique in annotated_info[field_name]:
-                    field_info.unique = True
-                if field_info.nullable is None and model_field.allow_none:
-                    field_info.nullable = True
-            elif isinstance(field_info, (RelationshipField, ForeignKeyField)):
-                if not (
-                    isinstance(
-                        model_field.type_,
-                        ForwardRef,
-                    )
-                    or issubclass(model_field.type_, Model)
-                ):
-                    raise TypeError("Related model type must be a Model")
-                if model_field.allow_none:
-                    field_info.nullable = True
+                field_info.nullable = model_field.allow_none
+            elif isinstance(field_info, (ReverseRelationshipField, ForeignKeyField)):
+                field_info.nullable = model_field.allow_none
                 field_info.related_model = model_field.type_  # type: ignore
-                if isinstance(field_info, ForeignKeyField):
-                    field_info.foreign_key_self_name = field_info.foreign_key.replace(
-                        ".",
-                        "_",
-                    )
-                    meta_config.related_fields[field_name] = field_info
-                    meta_config.columns[field_name] = Column(
-                        field_info.foreign_key_self_name,
-                        ForeignKey(
-                            field_info.foreign_key,
-                        ),
-                        nullable=field_info.nullable,
-                    )
-                else:
-                    field_info.is_list = check_is_list(model_field.outer_type_)
-                    meta_config.back_related_fields[field_name] = field_info
             else:
-                raise ValueError(f"Invalid field_info: {field_info}")
-            meta_config.model_fields[field_name] = field_info
+                raise TypeError(
+                    (
+                        'Field Type must be "cherry.Field", got unexpected type: '
+                        f' {field_info.__class__.__name__}'
+                    ),
+                )
         meta_config.primary_key = tuple(
             field.name
-            for field in meta_config.model_fields.values()
-            if isinstance(field, BaseField)
-            and field.primary_key
-            and field.name is not None
-        )
-        meta_config.foreign_keys = tuple(
-            f.foreign_key_self_name for f in meta_config.related_fields.values()
+            for field in new_cls.__fields__.values()
+            if isinstance(field.field_info, BaseField) and field.field_info.primary_key
         )
 
         if not meta_config.abstract and hasattr(meta_config, "database"):
-            meta_config.columns.update(
-                {
-                    k: v.to_sqlalchemy_column()
-                    for k, v in meta_config.model_fields.items()
-                    if isinstance(v, BaseField)
-                },
-            )
-            meta_config.table = Table(
-                new_cls.__meta__.tablename,
-                new_cls.__meta__.database._metadata,
-                *meta_config.columns.values(),
-                *meta_config.constraints,
-            )
-            meta_config.metadata = new_cls.__meta__.database._metadata
+            meta_config.database.add_model(new_cls)
 
         return new_cls
-
-    def __getattr__(self, item: str) -> Any:
-        if item in self.__meta__.columns:
-            return self.__meta__.columns[item]
-        if item in self.__meta__.related_fields:
-            return self.__meta__.related_fields[item].related_model
-        if item in self.__meta__.back_related_fields:
-            return self.__meta__.back_related_fields[item].related_model
-        return super().__getattribute__(item)
 
 
 class Model(BaseModel, metaclass=ModelMeta):
@@ -239,7 +175,7 @@ class Model(BaseModel, metaclass=ModelMeta):
                 )
             related_data = await rfield.related_model.__meta__.database.execute(
                 rfield.related_model.__meta__.table.select().where(
-                    getattr(rfield.related_model, rfield.foreign_key_field_name)
+                    getattr(rfield.related_model, rfield.foreign_key)
                     == self.__foreign_key_values__[rfield.foreign_key_self_name],
                 ),
             )
@@ -249,25 +185,29 @@ class Model(BaseModel, metaclass=ModelMeta):
                     name,
                     rfield.related_model.parse_from_db_dict(related_one._asdict()),
                 )
+            else:
+                if rfield.nullable:
+                    setattr(self, name, None)
+                else:
+                    raise ValueError(
+                        f"No matching data for {self.__class__.__name__}.{name}",
+                    )
 
-        back_related_fields = {
+        reverse_related_fields = {
             name: field
-            for name, field in self.__meta__.back_related_fields.items()
+            for name, field in self.__meta__.reverse_related_fields.items()
             if table_names is None
             or field.related_model.__meta__.tablename in table_names
         }
 
-        for name, rfield in back_related_fields.items():
-            target_field = rfield.related_model.__meta__.related_fields[
-                rfield.related_field
-            ]
+        for name, rfield in reverse_related_fields.items():
             related_data = await rfield.related_model.__meta__.database.execute(
                 rfield.related_model.__meta__.table.select().where(
                     getattr(
                         rfield.related_model,
-                        rfield.related_field,
+                        rfield.related_field_name,
                     )
-                    == getattr(self, target_field.foreign_key_field_name),
+                    == getattr(self, rfield.related_field.foreign_key),
                 ),
             )
             if rfield.is_list:
@@ -286,6 +226,13 @@ class Model(BaseModel, metaclass=ModelMeta):
                         name,
                         rfield.related_model.parse_from_db_dict(related_one._asdict()),
                     )
+                else:
+                    if rfield.nullable:
+                        setattr(self, name, None)
+                    else:
+                        raise ValueError(
+                            f"No matching data for {self.__class__.__name__}.{name}",
+                        )
         return self
 
     @check_connected
@@ -477,7 +424,7 @@ class Model(BaseModel, metaclass=ModelMeta):
         """
         exclude = (
             self.__meta__.related_fields.keys()
-            | self.__meta__.back_related_fields.keys()
+            | self.__meta__.reverse_related_fields.keys()
         )
         if exclude_pk:
             exclude |= set(self.__meta__.primary_key)
@@ -485,7 +432,7 @@ class Model(BaseModel, metaclass=ModelMeta):
         for field_name, field in self.__meta__.related_fields.items():
             value = getattr(
                 getattr(self, field_name),
-                field.foreign_key_field_name,
+                field.foreign_key,
             )
             data[field.foreign_key_self_name] = value
             self.__foreign_key_values__[field.foreign_key_self_name] = value
@@ -503,11 +450,113 @@ class Model(BaseModel, metaclass=ModelMeta):
 
     @classmethod
     def update_forward_refs(cls, **localns: Any):
-        super().update_forward_refs()
+        super().update_forward_refs(**localns)
+        model_type = []
         for _, field in cls.__fields__.items():
             field_info = field.field_info
             if isinstance(
                 field_info,
-                (RelationshipField, ForeignKeyField),
-            ) and isinstance(field_info.related_model, ForwardRef):
-                field_info.related_model = field.type_
+                (ReverseRelationshipField, ForeignKeyField),
+            ):
+                if isinstance(field_info.related_model, ForwardRef):
+                    field_info.related_model = field.type_
+                if not issubclass(field_info.related_model, Model):
+                    raise TypeError("Related model must be a Model")
+                if field_info.related_model in model_type:
+                    raise ValueError("同一个模型只有有一个关联关系")
+                model_type.append(field_info.related_model)
+
+    @classmethod
+    def _generate_sqlalchemy_column(cls):
+        if any(f for f in cls.__fields__.values() if isinstance(f.type_, ForwardRef)):
+            cls.update_forward_refs()
+        for model_field in cls.__fields__.values():
+            field_info = model_field.field_info
+            if isinstance(field_info, BaseField):
+                cls.__meta__.columns[model_field.name] = Column(
+                    model_field.name,
+                    type_=get_sqlalchemy_type_from_field(model_field),
+                    primary_key=field_info.primary_key,
+                    nullable=field_info.nullable,
+                    index=field_info.index,
+                    unique=field_info.unique,
+                    autoincrement=field_info.autoincrement,
+                    default=field_info.default or field_info.default_factory or None,
+                    **field_info.sa_column_args,
+                )
+                setattr(cls, model_field.name, cls.__meta__.columns[model_field.name])
+            elif isinstance(field_info, ForeignKeyField):
+                if field_info.related_field_name is None:
+                    for rname, rfield in field_info.related_model.__fields__.items():
+                        if (
+                            isinstance(rfield.field_info, ReverseRelationshipField)
+                            and rfield.field_info.related_model is cls
+                            and (
+                                rfield.field_info.related_field_name == model_field.name
+                                or rfield.field_info.related_field_name is None
+                            )
+                        ):
+                            field_info.related_field_name = rname
+                            field_info.related_field = rfield.field_info
+                            rfield.field_info.related_field_name = model_field.name
+                            rfield.field_info.related_field = field_info
+                            break
+                if not hasattr(field_info, "foreign_key"):
+                    if len(field_info.related_model.__meta__.primary_key) != 1:
+                        raise ValueError("主键多于一个，你必须手动给出主键")
+                    field_info.foreign_key = (
+                        field_info.related_model.__meta__.primary_key[0]
+                    )
+                field_info.foreign_key_self_name = f"{field_info.related_model.__meta__.tablename}_{field_info.foreign_key}"  # noqa: E501
+                cls.__meta__.columns[model_field.name] = Column(
+                    f"{field_info.related_model.__meta__.tablename}_{field_info.foreign_key}",
+                    ForeignKey(
+                        f"{field_info.related_model.__meta__.tablename}.{field_info.foreign_key}",
+                    ),
+                    nullable=field_info.nullable,
+                )
+                cls.__meta__.related_fields[model_field.name] = field_info
+                setattr(cls, model_field.name, cls.__meta__.columns[model_field.name])
+            elif isinstance(field_info, ReverseRelationshipField):
+                field_info.is_list = check_is_list(model_field.outer_type_)
+                if not hasattr(field_info, "related_field_name"):
+                    for rname, rfield in field_info.related_model.__fields__.items():
+                        if (
+                            isinstance(rfield.field_info, ForeignKeyField)
+                            and rfield.field_info.related_model is cls
+                            and (
+                                rfield.field_info.related_field_name == model_field.name
+                                or rfield.field_info.related_field_name is None
+                            )
+                        ):
+                            field_info.related_field_name = rname
+                            field_info.related_field = rfield.field_info
+                            rfield.field_info.related_field_name = model_field.name
+                            rfield.field_info.related_field = field_info
+                            break
+                if hasattr(field_info, "related_field_name"):
+                    cls.__meta__.reverse_related_fields[model_field.name] = field_info
+                    setattr(cls, model_field.name, field_info.related_model)
+                else:
+                    raise ValueError("关联字段不存在")
+            elif isinstance(field_info, ManyToManyField):
+                ...
+        cls.__meta__.foreign_keys = tuple(
+            f.foreign_key_self_name for f in cls.__meta__.related_fields.values()
+        )
+        return cls.__meta__.columns
+
+    @classmethod
+    def _generate_sqlalchemy_table(cls, metadata: MetaData) -> Table:
+        if cls.__meta__.abstract:
+            raise ValueError("Can not generate table for abstract model")
+        if hasattr(cls.__meta__, "table"):
+            return cls.__meta__.table
+        cls.__meta__.metadata = metadata
+        cls.__meta__.table = Table(
+            cls.__meta__.tablename,
+            metadata,
+            *cls.__meta__.columns.values(),
+            *cls.__meta__.constraints,
+        )
+        return cls.__meta__.table

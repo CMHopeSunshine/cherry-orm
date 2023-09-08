@@ -4,9 +4,11 @@ from .fields import (
     AutoIncrementIntPrimaryKey as AutoIncrementIntPrimaryKey,
     AutoIncrementPrimaryKey as AutoIncrementPrimaryKey,
     Field as Field,
+    ForeignKey as ForeignKey,
     Index as Index,
     PrimaryKey as PrimaryKey,
     Relationship as Relationship,
+    ReverseRelated as ReverseRelated,
     Unique as Unique,
 )
 from .meta import MetaConfig as MetaConfig

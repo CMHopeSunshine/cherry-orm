@@ -1,8 +1,6 @@
 from typing import Any, Dict, Optional, Tuple, Type, TYPE_CHECKING
 from typing_extensions import Annotated
 
-from cherry.fields.annotated import FieldInfoEnum
-
 import pydantic
 from pydantic.fields import ModelField
 from pydantic.typing import get_args, get_origin
@@ -13,13 +11,10 @@ if TYPE_CHECKING:
 
 def check_is_list(type_: Type[Any]) -> bool:
     ori = get_origin(type_)
+    if ori is Annotated:
+        args = get_args(type_)
+        return get_origin(args[0]) is list
     return ori is list
-
-
-def get_annotated_field_info(type_: Type[Any]) -> Tuple[FieldInfoEnum, ...]:
-    if get_origin(type_) is not Annotated:
-        return ()
-    return tuple(arg for arg in get_args(type_) if isinstance(arg, FieldInfoEnum))
 
 
 def validate_fields(

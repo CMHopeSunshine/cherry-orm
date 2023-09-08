@@ -1,19 +1,9 @@
-import datetime
-from decimal import Decimal
-from enum import Enum
-import ipaddress
-from pathlib import Path
-from typing import Any, Dict, Optional, Type, TYPE_CHECKING, TypeVar, Union
+from typing import Any, Dict, Literal, Optional, Type, TYPE_CHECKING, TypeVar, Union
 from typing_extensions import Annotated, Self
-from uuid import UUID
-
-from .types import AutoString, GUID
 
 from pydantic.fields import FieldInfo, Undefined
-from pydantic.main import BaseModel
 from pydantic.typing import NoArgAnyCallable
 from sqlalchemy import Column
-import sqlalchemy.types as sa_type
 
 if TYPE_CHECKING:
     from cherry.models import Model
@@ -26,22 +16,16 @@ PrimaryKey = Annotated[T, "primary_key"]
 
 
 class BaseField(FieldInfo):
-    def __init__(self, default: Any = ..., **kwargs: Any) -> None:
-        self.name: Optional[str] = kwargs.pop("name", None)
-        self.type: Optional[Type[Any]] = kwargs.pop("type", None)
+    nullable: bool = False
 
+    def __init__(self, default: Any = ..., **kwargs: Any) -> None:
         self.primary_key: bool = kwargs.pop("primary_key", False)
         self.autoincrement: bool = kwargs.pop("autoincrement", False)
         self.index: bool = kwargs.pop("index", False)
         self.column_type: Optional[Column] = kwargs.pop("column_type", None)
         self.unique: bool = kwargs.pop("unique", False)
-        self.nullable: Optional[bool] = kwargs.pop("nullable", None)
         self.sa_column_args: Dict[str, Any] = kwargs.pop("sa_column_args", {}) or {}
         super().__init__(default, **kwargs)
-
-    def __repr_args__(self):
-        attrs = ((s, getattr(self, s)) for s in self.__dict__)
-        return [(a, v) for a, v in attrs if v]
 
     @classmethod
     def from_base_field_info(cls, field_info: FieldInfo) -> Self:
@@ -75,110 +59,38 @@ class BaseField(FieldInfo):
             **field_info.extra,
         )
 
-    def to_sqlalchemy_column(self) -> Column:
-        if self.column_type is not None:
-            return self.column_type
-        if self.type is None:
-            raise ValueError("type is required")
-        if issubclass(self.type, int):
-            type_ = sa_type.Integer
-        elif issubclass(self.type, str):
-            if self.max_length:
-                type_ = AutoString(length=self.max_length)
-            else:
-                type_ = AutoString
-        elif issubclass(self.type, float):
-            type_ = sa_type.Float
-        elif issubclass(self.type, bool):
-            type_ = sa_type.Boolean
-        elif issubclass(self.type, datetime.datetime):
-            type_ = sa_type.DateTime
-        elif issubclass(self.type, datetime.date):
-            type_ = sa_type.Date
-        elif issubclass(self.type, datetime.time):
-            type_ = sa_type.Time
-        elif issubclass(self.type, datetime.timedelta):
-            type_ = sa_type.Interval
-        elif issubclass(self.type, bytes):
-            type_ = sa_type.LargeBinary
-        elif issubclass(
-            self.type,
-            (
-                Path,
-                ipaddress.IPv4Address,
-                ipaddress.IPv4Network,
-                ipaddress.IPv6Address,
-                ipaddress.IPv6Network,
-            ),
-        ):
-            type_ = AutoString
-        elif issubclass(self.type, UUID):
-            type_ = GUID
-        elif issubclass(self.type, Enum):
-            type_ = sa_type.Enum(self.type)
-        elif issubclass(self.type, Decimal):
-            type_ = sa_type.Numeric(
-                precision=getattr(self.type, "max_digits", None),
-                scale=getattr(self.type, "decimal_places", None),
-            )
-        elif issubclass(self.type, (list, dict, tuple, set, BaseModel)):
-            type_ = sa_type.JSON
-        else:
-            raise TypeError(
-                f"Field {self.name}'s type {self.type} has no matching SQLAlchemy type",
-            )
-
-        return Column(
-            self.name,
-            type_,
-            primary_key=self.primary_key,
-            autoincrement=self.autoincrement,
-            index=self.index,
-            unique=self.unique,
-            default=self.default or None,
-            nullable=self.nullable,
-            **self.sa_column_args,
-        )
-
 
 class ForeignKeyField(FieldInfo):
     related_model: Type["Model"]
-    foreign_key: str  #  example: "user.id"
+    foreign_key: str  #  example: "id"
     foreign_key_self_name: str  # example: "user_id"
-    foreign_key_field_name: str  # example: "id"
-    related_field: str  # example: "user"
+    related_field_name: Optional[str]  # example: "user"
+    related_field: Optional["ReverseRelationshipField"]
 
-    def __init__(self, related_field: Any, foreign_key: Any, **kwargs: Any) -> None:
-        self.related_field: str = (
-            related_field.name
-            if isinstance(related_field, Column)
-            else str(related_field)
-        )
-        self.foreign_key: str = (
-            f"{foreign_key.table.name}.{foreign_key.name}"
-            if isinstance(foreign_key, Column)
-            else str(foreign_key)
-        )
-        self.foreign_key_field_name: str = self.foreign_key.split(".")[-1]
+    def __init__(
+        self,
+        related_field: Optional[str],
+        foreign_key: Union[Literal[True], str],
+        **kwargs: Any,
+    ) -> None:
+        self.related_field = None  #  generate when generate model column
+        # if related_field is not None:
+        self.related_field_name = related_field
+        if isinstance(foreign_key, str):
+            self.foreign_key = foreign_key
         self.nullable: bool = kwargs.pop("nullable", False)
         super().__init__(**kwargs)
 
-    def __repr_args__(self):
-        attrs = ((s, getattr(self, s)) for s in self.__dict__)
-        return [(a, v) for a, v in attrs if v]
 
-
-class RelationshipField(FieldInfo):
+class ReverseRelationshipField(FieldInfo):
     related_model: Type["Model"]
-    related_field: str
+    related_field_name: str
+    related_field: ForeignKeyField
     is_list: bool
 
-    def __init__(self, related_field: Any, **kwargs: Any) -> None:
-        self.related_field: str = (
-            related_field.name
-            if isinstance(related_field, Column)
-            else str(related_field)
-        )
+    def __init__(self, related_field: Optional[str], **kwargs: Any) -> None:
+        if related_field is not None:
+            self.related_field_name = related_field
         self.nullable: bool = kwargs.pop("nullable", False)
         super().__init__(**kwargs)
 
@@ -188,7 +100,22 @@ class RelationshipField(FieldInfo):
 
 
 class ManyToManyField(FieldInfo):
-    ...
+    many_to_many_key: str
+    related_field_name: str
+    related_field: "ManyToManyField"
+
+    def __init__(
+        self,
+        related_field: Optional[str],
+        many_to_many: Union[Literal[True], str],
+        **kwargs: Any,
+    ) -> None:
+        if related_field is not None:
+            self.related_field_name = related_field
+        if isinstance(many_to_many, str):
+            self.many_to_many_key = many_to_many
+        self.nullable: bool = kwargs.pop("nullable", False)
+        super().__init__(**kwargs)
 
 
 def Field(
@@ -199,7 +126,6 @@ def Field(
     index: bool = False,
     column_type: Optional[Column] = None,
     unique: bool = False,
-    nullable: bool = False,
     sa_column_args: Optional[Dict[str, Any]] = None,
     default_factory: Optional[NoArgAnyCallable] = None,
     alias: Optional[str] = None,
@@ -227,7 +153,6 @@ def Field(
     repr: bool = True,
     **extra: Any,
 ) -> Any:
-    nullable = False if primary_key else nullable
     field_info = BaseField(
         default=default,
         default_factory=default_factory,
@@ -236,7 +161,6 @@ def Field(
         index=index,
         column_type=column_type,
         unique=unique,
-        nullable=nullable,
         sa_column_args=sa_column_args,
         alias=alias,
         title=title,
@@ -268,10 +192,13 @@ def Field(
 
 
 def Relationship(
-    related_field: Any,
+    related_field: Optional[str] = None,
     *,
-    foreign_key: Optional[Any] = None,
-    nullable: bool = False,
+    foreign_key: Union[Literal[True], str, None] = None,
+    reverse_related: Optional[Literal[True]] = None,
+    many_to_many: Union[Literal[True], str, None] = None,
+    sa_column_args: Optional[Dict[str, Any]] = None,
+    default: Any = Undefined,
     default_factory: Optional[NoArgAnyCallable] = None,
     alias: Optional[str] = None,
     title: Optional[str] = None,
@@ -282,12 +209,39 @@ def Relationship(
     repr: bool = True,
     **extra: Any,
 ) -> Any:
+    if sum(arg is not None for arg in (foreign_key, reverse_related, many_to_many)) > 1:
+        raise ValueError(
+            "Can only set foreign_key, reverse_related or many_to_many in one field",
+        )
     if foreign_key is not None:
         field_info = ForeignKeyField(
             foreign_key=foreign_key,
             related_field=related_field,
+            # others will be save in extra
+            reverse_related=reverse_related,
+            many_to_many=many_to_many,
+            default=default,
             default_factory=default_factory,
-            nullable=nullable,
+            sa_column_args=sa_column_args,
+            alias=alias,
+            title=title,
+            description=description,
+            exclude=exclude,
+            include=include,
+            discriminator=discriminator,
+            repr=repr,
+            **extra,
+        )
+    elif many_to_many is not None:
+        field_info = ManyToManyField(
+            many_to_many=many_to_many,
+            related_field=related_field,
+            # others will be save in extra
+            foreign_key=foreign_key,
+            reverse_related=reverse_related,
+            default=default,
+            default_factory=default_factory,
+            sa_column_args=sa_column_args,
             alias=alias,
             title=title,
             description=description,
@@ -298,10 +252,15 @@ def Relationship(
             **extra,
         )
     else:
-        field_info = RelationshipField(
+        field_info = ReverseRelationshipField(
             related_field=related_field,
+            # others will be save in extra
+            foreign_key=foreign_key,
+            reverse_related=reverse_related,
+            many_to_many=many_to_many,
+            default=default,
             default_factory=default_factory,
-            nullable=nullable,
+            sa_column_args=sa_column_args,
             alias=alias,
             title=title,
             description=description,

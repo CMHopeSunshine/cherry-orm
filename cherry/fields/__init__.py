@@ -2,16 +2,20 @@ from .annotated import (
     AutoIncrement as AutoIncrement,
     AutoIncrementIntPrimaryKey as AutoIncrementIntPrimaryKey,
     AutoIncrementPrimaryKey as AutoIncrementPrimaryKey,
+    ForeignKey as ForeignKey,
     Index as Index,
+    ManyToMany as ManyToMany,
     PrimaryKey as PrimaryKey,
+    ReverseRelated as ReverseRelated,
     Unique as Unique,
 )
 from .fields import (
     BaseField as BaseField,
     Field as Field,
     ForeignKeyField as ForeignKeyField,
+    ManyToManyField as ManyToManyField,
     Relationship as Relationship,
-    RelationshipField as RelationshipField,
+    ReverseRelationshipField as ReverseRelationshipField,
 )
 from .types import (
     AutoString as AutoString,

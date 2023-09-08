@@ -7,11 +7,10 @@ from typing import (
     Tuple,
     Type,
     TYPE_CHECKING,
-    Union,
 )
 
 from cherry.database import Database
-from cherry.fields.fields import BaseField, ForeignKeyField, RelationshipField
+from cherry.fields.fields import ForeignKeyField, ReverseRelationshipField
 
 from sqlalchemy import Column, MetaData, Table
 from sqlalchemy.sql.schema import ColumnCollectionConstraint
@@ -28,12 +27,9 @@ class MetaConfig:
     columns: ClassVar[Dict[str, Column]]
     constraints: ClassVar[List[ColumnCollectionConstraint]]
     abstract: ClassVar[bool]
-    model_fields: ClassVar[
-        Dict[str, Union[BaseField, RelationshipField, ForeignKeyField]]
-    ]
     primary_key: ClassVar[Tuple[str, ...]]
     related_fields: ClassVar[Dict[str, ForeignKeyField]]
-    back_related_fields: ClassVar[Dict[str, RelationshipField]]
+    reverse_related_fields: ClassVar[Dict[str, ReverseRelationshipField]]
     foreign_keys: ClassVar[Tuple[str, ...]]
 
 
@@ -57,8 +53,7 @@ def init_meta_config(
 ):
     if not hasattr(meta_config, "abstract"):
         meta_config.abstract = False
-    meta_config.model_fields = {}
     meta_config.columns = {}
     meta_config.constraints = []
     meta_config.related_fields = {}
-    meta_config.back_related_fields = {}
+    meta_config.reverse_related_fields = {}

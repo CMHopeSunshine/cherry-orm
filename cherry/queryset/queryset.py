@@ -16,7 +16,7 @@ from typing import (
 )
 from typing_extensions import Self, TypeVarTuple, Unpack
 
-from cherry.fields.fields import ForeignKeyField, RelationshipField
+from cherry.fields.fields import ForeignKeyField, ReverseRelationshipField
 from cherry.utils import validate_fields
 
 from .protocol import QuerySetProtocol
@@ -40,7 +40,9 @@ class QueryOptions:
     related: List[Any] = field(default_factory=list)
     join: List[Any] = field(default_factory=list)
     related_fields: Dict[str, ForeignKeyField] = field(default_factory=dict)
-    back_related_fields: Dict[str, RelationshipField] = field(default_factory=dict)
+    reverse_related_fields: Dict[str, ReverseRelationshipField] = field(
+        default_factory=dict,
+    )
 
     def as_select_option(self, select_stat: Select):
         select_stat = select_stat.where(*self.filter)
@@ -143,9 +145,9 @@ class QuerySet(QuerySetProtocol, Generic[T_MODEL]):
             or field.related_model.__meta__.tablename in table_names
         }
 
-        self.options.back_related_fields = {
+        self.options.reverse_related_fields = {
             name: field
-            for name, field in self.model_cls.__meta__.back_related_fields.items()
+            for name, field in self.model_cls.__meta__.reverse_related_fields.items()
             if table_names is None
             or field.related_model.__meta__.tablename in table_names
         }
@@ -301,23 +303,21 @@ class QuerySet(QuerySetProtocol, Generic[T_MODEL]):
         for name, rfield in self.options.related_fields.items():
             related_data = await rfield.related_model.__meta__.database.execute(
                 rfield.related_model.__meta__.table.select().where(
-                    getattr(rfield.related_model, rfield.foreign_key_field_name)
+                    getattr(rfield.related_model, rfield.foreign_key)
                     == now_data[rfield.foreign_key_self_name],
                 ),
             )
             if related_one := related_data.fetchone():
                 now_data[name] = related_one._asdict()
-        for name, rfield in self.options.back_related_fields.items():
-            target_field = rfield.related_model.__meta__.related_fields[
-                rfield.related_field
-            ]
+        for name, rfield in self.options.reverse_related_fields.items():
+            target_field = rfield.related_field
             related_data = await rfield.related_model.__meta__.database.execute(
                 rfield.related_model.__meta__.table.select().where(
                     getattr(
                         rfield.related_model,
-                        rfield.related_field,
+                        rfield.related_field_name,
                     )
-                    == now_data[target_field.foreign_key_field_name],
+                    == now_data[target_field.foreign_key],
                 ),
             )
             if rfield.is_list:
@@ -333,29 +333,32 @@ class QuerySet(QuerySetProtocol, Generic[T_MODEL]):
             related_values = [data[rfield.foreign_key_self_name] for data in now_datas]
             related_data = await rfield.related_model.__meta__.database.execute(
                 rfield.related_model.__meta__.table.select().where(
-                    getattr(rfield.related_model, rfield.foreign_key_field_name).in_(
+                    getattr(rfield.related_model, rfield.foreign_key).in_(
                         related_values,
                     ),
                 ),
             )
             related_datas = [rd._asdict() for rd in related_data.fetchall()]
             related_datas_dict = {
-                data[rfield.foreign_key_field_name]: data for data in related_datas
+                data[rfield.foreign_key]: data for data in related_datas
             }
             for data in now_datas:
-                data[name] = related_datas_dict[data[rfield.foreign_key_self_name]]
-        for name, rfield in self.options.back_related_fields.items():
-            target_field = rfield.related_model.__meta__.related_fields[
-                rfield.related_field
-            ]
-            related_values = [
-                data[target_field.foreign_key_field_name] for data in now_datas
-            ]
+                data[name] = related_datas_dict.get(
+                    data[rfield.foreign_key_self_name],
+                    None,
+                )
+                if data[name] is None and not rfield.nullable:
+                    raise ValueError(
+                        f"No matching data for {self.model_cls.__name__}.{name}",
+                    )
+        for name, rfield in self.options.reverse_related_fields.items():
+            target_field = rfield.related_field
+            related_values = [data[target_field.foreign_key] for data in now_datas]
             related_data = await rfield.related_model.__meta__.database.execute(
                 rfield.related_model.__meta__.table.select().where(
                     getattr(
                         rfield.related_model,
-                        rfield.related_field,
+                        rfield.related_field_name,
                     ).in_(related_values),
                 ),
             )
@@ -365,7 +368,7 @@ class QuerySet(QuerySetProtocol, Generic[T_MODEL]):
                     related_data
                     for related_data in related_datas
                     if related_data[target_field.foreign_key_self_name]
-                    == data[target_field.foreign_key_field_name]
+                    == data[target_field.foreign_key]
                 ]
                 if rfield.is_list:
                     data[name] = rd

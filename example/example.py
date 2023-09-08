@@ -2,11 +2,11 @@ import asyncio
 from datetime import date
 from typing import Optional
 
-from cherry import Database, Field, Model, Relationship
+from cherry import Database, Field, ForeignKey, Model, ReverseRelated
 from cherry.fields import AutoIncrementIntPrimaryKey, PrimaryKey
 
 database = Database("sqlite+aiosqlite:///:memory:")
-"""创建一个数据库实例对象，传入数据库连接字符串，这里表示使用sqlite内存数据库"""
+"""创建一个数据库实例对象，传入数据库连接字符串"""
 
 
 class School(Model):
@@ -14,11 +14,8 @@ class School(Model):
     """定义自增主键，默认值为None表示由数据库自动生成"""
     name: str
     built_date: date = Field(default_factory=date.today)
-    classes: list["Class"] = Relationship(
-        default_factory=list,
-        related_field="school",
-    )
-    """反向外键关联关系，一个学校可以有多个班级"""
+    classes: ReverseRelated[list["Class"]] = []
+    """反向关联关系"""
 
     class Meta:
         tablename = "school"
@@ -31,16 +28,10 @@ class Class(Model):
     id: AutoIncrementIntPrimaryKey = None
     """自增主键的简便写法"""
     name: str
-    school: Optional[School] = Relationship(
-        foreign_key="school.id",
-        related_field="classes",
-    )
-    """外键关系，表示班级所属的学校"""
-    students: list["Student"] = Relationship(
-        default_factory=list,
-        related_field="class_",
-    )
-    """反向外键关联关系，一个班级可以有多个学生"""
+    school: ForeignKey[Optional[School]]
+    """外键关系"""
+    students: ReverseRelated[list["Student"]] = []
+    """反向关联关系"""
 
     class Meta:
         tablename = "class"
@@ -54,24 +45,16 @@ class Student(Model):
     """可以设置默认值"""
     job: Optional[str] = None
     """可以为空"""
-    class_: Optional[Class] = Relationship(
-        foreign_key="class.id",
-        related_field="students",
-    )
-    """外键关系，表示学生所属的班级"""
+    class_: ForeignKey[Optional[Class]]
+    """外键关系"""
 
     class Meta:
         tablename = "student"
         database = database
 
 
-School.update_forward_refs()
-Class.update_forward_refs()
-# 更新向前引用，使得类型验证和Relationship中的类型提示生效
-
-
 async def main():
-    await database.create_all()  # 在数据库中创建表
+    await database.init()  # 初始化模型及数据库
 
     # 插入
     await School(name="school 1", built_date=date(2000, 1, 1)).insert()
