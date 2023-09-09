@@ -1,8 +1,8 @@
 from .database import Database as Database
 from .fields import (
     AutoIncrement as AutoIncrement,
-    AutoIncrementIntPrimaryKey as AutoIncrementIntPrimaryKey,
-    AutoIncrementPrimaryKey as AutoIncrementPrimaryKey,
+    AutoIncrementPK as AutoIncrementPK,
+    AutoIntPK as AutoIntPK,
     Field as Field,
     ForeignKey as ForeignKey,
     Index as Index,

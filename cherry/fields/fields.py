@@ -3,7 +3,7 @@ from typing_extensions import Annotated, Self
 
 from pydantic.fields import FieldInfo, Undefined
 from pydantic.typing import NoArgAnyCallable
-from sqlalchemy import Column
+from sqlalchemy import Column, Table
 
 if TYPE_CHECKING:
     from cherry.models import Model
@@ -62,23 +62,28 @@ class BaseField(FieldInfo):
 
 class ForeignKeyField(FieldInfo):
     related_model: Type["Model"]
-    foreign_key: str  #  example: "id"
-    foreign_key_self_name: str  # example: "user_id"
-    related_field_name: Optional[str]  # example: "user"
+    foreign_key: str
+    foreign_key_self_name: str
+    related_field_name: Optional[str]
     related_field: Optional["ReverseRelationshipField"]
+    on_update: Optional[str]
+    on_delete: Optional[str]
+    nullable: bool = False
 
     def __init__(
         self,
         related_field: Optional[str],
         foreign_key: Union[Literal[True], str],
+        on_update: Optional[str],
+        on_delete: Optional[str],
         **kwargs: Any,
     ) -> None:
         self.related_field = None  #  generate when generate model column
-        # if related_field is not None:
         self.related_field_name = related_field
         if isinstance(foreign_key, str):
             self.foreign_key = foreign_key
-        self.nullable: bool = kwargs.pop("nullable", False)
+        self.on_update = on_update
+        self.on_delete = on_delete
         super().__init__(**kwargs)
 
 
@@ -87,11 +92,21 @@ class ReverseRelationshipField(FieldInfo):
     related_field_name: str
     related_field: ForeignKeyField
     is_list: bool
+    on_update: Optional[str]
+    on_delete: Optional[str]
+    nullable: bool = False
 
-    def __init__(self, related_field: Optional[str], **kwargs: Any) -> None:
+    def __init__(
+        self,
+        related_field: Optional[str],
+        on_update: Optional[str],
+        on_delete: Optional[str],
+        **kwargs: Any,
+    ) -> None:
         if related_field is not None:
             self.related_field_name = related_field
-        self.nullable: bool = kwargs.pop("nullable", False)
+        self.on_update = on_update
+        self.on_delete = on_delete
         super().__init__(**kwargs)
 
     def __repr_args__(self):
@@ -100,21 +115,30 @@ class ReverseRelationshipField(FieldInfo):
 
 
 class ManyToManyField(FieldInfo):
-    many_to_many_key: str
+    related_model: Type["Model"]
+    m2m_field: str
+    m2m_table_field: str
     related_field_name: str
     related_field: "ManyToManyField"
+    on_update: Optional[str]
+    on_delete: Optional[str]
+    nullable: bool = False
+    table: Table
 
     def __init__(
         self,
         related_field: Optional[str],
         many_to_many: Union[Literal[True], str],
+        on_update: Optional[str],
+        on_delete: Optional[str],
         **kwargs: Any,
     ) -> None:
         if related_field is not None:
             self.related_field_name = related_field
         if isinstance(many_to_many, str):
-            self.many_to_many_key = many_to_many
-        self.nullable: bool = kwargs.pop("nullable", False)
+            self.m2m_field = many_to_many
+        self.on_update = on_update
+        self.on_delete = on_delete
         super().__init__(**kwargs)
 
 
@@ -124,8 +148,8 @@ def Field(
     primary_key: bool = False,
     autoincrement: bool = False,
     index: bool = False,
-    column_type: Optional[Column] = None,
     unique: bool = False,
+    sa_column: Optional[Column] = None,
     sa_column_args: Optional[Dict[str, Any]] = None,
     default_factory: Optional[NoArgAnyCallable] = None,
     alias: Optional[str] = None,
@@ -159,8 +183,8 @@ def Field(
         primary_key=primary_key,
         autoincrement=autoincrement,
         index=index,
-        column_type=column_type,
         unique=unique,
+        sa_column=sa_column,
         sa_column_args=sa_column_args,
         alias=alias,
         title=title,
@@ -197,6 +221,24 @@ def Relationship(
     foreign_key: Union[Literal[True], str, None] = None,
     reverse_related: Optional[Literal[True]] = None,
     many_to_many: Union[Literal[True], str, None] = None,
+    on_update: Optional[
+        Literal[
+            "RESTRICT",
+            "CASCADE",
+            "SET NULL",
+            "NO ACTION",
+            "SET DEFAULT",
+        ]
+    ] = None,
+    on_delete: Optional[
+        Literal[
+            "RESTRICT",
+            "CASCADE",
+            "SET NULL",
+            "NO ACTION",
+            "SET DEFAULT",
+        ]
+    ] = None,
     sa_column_args: Optional[Dict[str, Any]] = None,
     default: Any = Undefined,
     default_factory: Optional[NoArgAnyCallable] = None,
@@ -217,9 +259,8 @@ def Relationship(
         field_info = ForeignKeyField(
             foreign_key=foreign_key,
             related_field=related_field,
-            # others will be save in extra
-            reverse_related=reverse_related,
-            many_to_many=many_to_many,
+            on_update=on_update,
+            on_delete=on_delete,
             default=default,
             default_factory=default_factory,
             sa_column_args=sa_column_args,
@@ -236,9 +277,8 @@ def Relationship(
         field_info = ManyToManyField(
             many_to_many=many_to_many,
             related_field=related_field,
-            # others will be save in extra
-            foreign_key=foreign_key,
-            reverse_related=reverse_related,
+            on_update=on_update,
+            on_delete=on_delete,
             default=default,
             default_factory=default_factory,
             sa_column_args=sa_column_args,
@@ -254,13 +294,10 @@ def Relationship(
     else:
         field_info = ReverseRelationshipField(
             related_field=related_field,
-            # others will be save in extra
-            foreign_key=foreign_key,
-            reverse_related=reverse_related,
-            many_to_many=many_to_many,
+            on_update=on_update,
+            on_delete=on_delete,
             default=default,
             default_factory=default_factory,
-            sa_column_args=sa_column_args,
             alias=alias,
             title=title,
             description=description,

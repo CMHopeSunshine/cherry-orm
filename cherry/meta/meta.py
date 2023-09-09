@@ -10,7 +10,11 @@ from typing import (
 )
 
 from cherry.database import Database
-from cherry.fields.fields import ForeignKeyField, ReverseRelationshipField
+from cherry.fields.fields import (
+    ForeignKeyField,
+    ManyToManyField,
+    ReverseRelationshipField,
+)
 
 from sqlalchemy import Column, MetaData, Table
 from sqlalchemy.sql.schema import ColumnCollectionConstraint
@@ -31,6 +35,8 @@ class MetaConfig:
     related_fields: ClassVar[Dict[str, ForeignKeyField]]
     reverse_related_fields: ClassVar[Dict[str, ReverseRelationshipField]]
     foreign_keys: ClassVar[Tuple[str, ...]]
+    many_to_many_fields: ClassVar[Dict[str, ManyToManyField]]
+    many_to_many_tables: ClassVar[Dict[str, Table]]
 
 
 def mix_meta_config(
@@ -57,3 +63,5 @@ def init_meta_config(
     meta_config.constraints = []
     meta_config.related_fields = {}
     meta_config.reverse_related_fields = {}
+    meta_config.many_to_many_fields = {}
+    meta_config.many_to_many_tables = {}

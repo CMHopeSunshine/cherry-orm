@@ -6,5 +6,6 @@ import pytest_asyncio
 @pytest_asyncio.fixture(autouse=True)
 async def db():
     await database.drop_all()
-    await database.create_all()
+    await database.init()
     yield
+    await database.dispose()

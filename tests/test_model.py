@@ -28,16 +28,16 @@ async def test_meta():
     assert User.__meta__.constraints == []
     assert not User.__meta__.abstract
 
-    assert User.__meta__.model_fields.keys() == {"id", "name", "age", "money"}
-    assert isinstance(User.__meta__.model_fields["id"], BaseField)
-    assert User.__meta__.model_fields["id"].primary_key
-    assert User.__meta__.model_fields["id"].autoincrement
-    assert not User.__meta__.model_fields["id"].nullable
-    assert isinstance(User.__meta__.model_fields["name"], BaseField)
-    assert isinstance(User.__meta__.model_fields["age"], BaseField)
-    assert isinstance(User.__meta__.model_fields["money"], BaseField)
+    assert User.__fields__.keys() == {"id", "name", "age", "money"}
+    assert isinstance(User.__fields__["id"], BaseField)
+    assert User.__fields__["id"].primary_key
+    assert User.__fields__["id"].autoincrement
+    assert not User.__fields__["id"].nullable
+    assert isinstance(User.__fields__["name"], BaseField)
+    assert isinstance(User.__fields__["age"], BaseField)
+    assert isinstance(User.__fields__["money"], BaseField)
 
     assert User.__meta__.primary_key == ("id",)
     assert User.__meta__.related_fields == {}
-    assert User.__meta__.back_related_fields == {}
+    assert User.__meta__.reverse_related_fields == {}
     assert User.__meta__.foreign_keys == ()

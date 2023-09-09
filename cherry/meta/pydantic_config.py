@@ -1,6 +1,8 @@
 import inspect
 from typing import Any
 
+from cherry.helpers import classproperty
+
 from pydantic import BaseConfig
 
 
@@ -8,6 +10,7 @@ def get_default_pydantic_config():
     class PydanticBaseConfig(BaseConfig):
         orm_mode = True
         validate_assignment = True
+        keep_untouched = (classproperty,)
 
     return PydanticBaseConfig
 

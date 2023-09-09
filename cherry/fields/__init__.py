@@ -1,7 +1,7 @@
 from .annotated import (
     AutoIncrement as AutoIncrement,
-    AutoIncrementIntPrimaryKey as AutoIncrementIntPrimaryKey,
-    AutoIncrementPrimaryKey as AutoIncrementPrimaryKey,
+    AutoIncrementPK as AutoIncrementPK,
+    AutoIntPK as AutoIntPK,
     ForeignKey as ForeignKey,
     Index as Index,
     ManyToMany as ManyToMany,

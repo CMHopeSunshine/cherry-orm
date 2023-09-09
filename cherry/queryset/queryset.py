@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-import inspect
 from typing import (
     Any,
     Dict,
@@ -16,12 +15,17 @@ from typing import (
 )
 from typing_extensions import Self, TypeVarTuple, Unpack
 
-from cherry.fields.fields import ForeignKeyField, ReverseRelationshipField
-from cherry.utils import validate_fields
+from cherry.exception import MultipleDataError, NoMatchDataError, PaginateArgError
+from cherry.fields.fields import (
+    ForeignKeyField,
+    ManyToManyField,
+    ReverseRelationshipField,
+)
+from cherry.fields.utils import validate_fields
 
 from .protocol import QuerySetProtocol
 
-from sqlalchemy import Column, ColumnElement, exists, func, Select, select, Table
+from sqlalchemy import Column, ColumnElement, exists, func, Select, select
 
 if TYPE_CHECKING:
     from cherry.models.models import Model
@@ -43,6 +47,7 @@ class QueryOptions:
     reverse_related_fields: Dict[str, ReverseRelationshipField] = field(
         default_factory=dict,
     )
+    many_to_many_fields: Dict[str, ManyToManyField] = field(default_factory=dict)
 
     def as_select_option(self, select_stat: Select):
         select_stat = select_stat.where(*self.filter)
@@ -80,8 +85,6 @@ class QuerySet(QuerySetProtocol, Generic[T_MODEL]):
                     and f.right.table != self.model_cls.__meta__.table
                 ):
                     join_.append(f.right.table)
-        self.table = model_cls.__meta__.table
-        self.database = model_cls.__meta__.database
         self.options = QueryOptions(
             filter=filter_,
             order_by=list(order_by or []),
@@ -117,40 +120,37 @@ class QuerySet(QuerySetProtocol, Generic[T_MODEL]):
         self.options.offset = num
         return self
 
-    def prefetch_related(self, *tables: Any) -> Self:
-        from cherry.models import Model
+    def prefetch_related(self, *args: Any) -> Self:
+        table_names = self.model_cls._get_related_tables(*args)
 
-        if tables:
-            table_names = []
-            for table in tables:
-                if isinstance(table, Table):
-                    table_names.append(table.name)
-                elif isinstance(table, Column):
-                    table_names.append(table.table.name)
-                elif isinstance(table, str):
-                    table_names.append(table)
-                elif inspect.isclass(table) and issubclass(table, Model):
-                    table_names.append(table.__meta__.tablename)
-                else:
-                    raise TypeError(
-                        f"table must be str, Table or Model, not {type(table)}",
-                    )
-        else:
-            table_names = None
-
-        self.options.related_fields = {
-            name: field
-            for name, field in self.model_cls.__meta__.related_fields.items()
+        self.options.related_fields = (
+            self.model_cls.__meta__.related_fields
             if table_names is None
-            or field.related_model.__meta__.tablename in table_names
-        }
-
-        self.options.reverse_related_fields = {
-            name: field
-            for name, field in self.model_cls.__meta__.reverse_related_fields.items()
+            else {
+                name: field
+                for name, field in self.model_cls.__meta__.related_fields.items()
+                if field.related_model.__meta__.tablename in table_names
+            }
+        )
+        reverse_related_fields = self.model_cls.__meta__.reverse_related_fields
+        self.options.reverse_related_fields = (
+            self.model_cls.__meta__.reverse_related_fields
             if table_names is None
-            or field.related_model.__meta__.tablename in table_names
-        }
+            else {
+                name: field
+                for name, field in reverse_related_fields.items()
+                if field.related_model.__meta__.tablename in table_names
+            }
+        )
+        self.options.many_to_many_fields = (
+            self.model_cls.__meta__.many_to_many_fields
+            if table_names is None
+            else {
+                name: field
+                for name, field in self.model_cls.__meta__.many_to_many_fields.items()
+                if field.related_model.__meta__.tablename in table_names
+            }
+        )
         return self
 
     @overload
@@ -198,8 +198,8 @@ class QuerySet(QuerySetProtocol, Generic[T_MODEL]):
         return CoalesceQuerySet(*column, model_cls=self.model_cls, options=self.options)
 
     async def first(self) -> Optional[T_MODEL]:
-        result = await self.database.execute(
-            self.options.as_select_option(self.table.select()),
+        result = await self.model_cls.database.execute(
+            self.options.as_select_option(self.model_cls.table.select()),
         )
         if result_one := result.fetchone():
             data = result_one._asdict()
@@ -210,21 +210,23 @@ class QuerySet(QuerySetProtocol, Generic[T_MODEL]):
         return None
 
     async def get(self) -> T_MODEL:
-        result = await self.database.execute(
-            self.options.as_select_option(self.table.select()),
+        result = await self.model_cls.database.execute(
+            self.options.as_select_option(self.model_cls.table.select()),
         )
         results = result.fetchall()
         if len(results) > 1:
-            raise ValueError("More than one result")
+            raise MultipleDataError(
+                f"{self.model_cls} expect one data, but got {len(results)} datas",
+            )
         if len(results) == 1:
             data = results[0]._asdict()
             await self._fetch_one_related(data)
             return self.model_cls.parse_from_db_dict(data)
-        raise ValueError(f"No result for {self.model_cls.__meta__.tablename}")
+        raise NoMatchDataError(f"No match data for {self.model_cls}")
 
     async def all(self) -> List[T_MODEL]:
-        result = await self.database.execute(
-            self.options.as_select_option(self.table.select()),
+        result = await self.model_cls.database.execute(
+            self.options.as_select_option(self.model_cls.table.select()),
         )
         data = [data._asdict() for data in result.fetchall()]
         await self._fetch_many_related(data)
@@ -232,9 +234,9 @@ class QuerySet(QuerySetProtocol, Generic[T_MODEL]):
         return [self.model_cls.parse_from_db_dict(data) for data in data]
 
     async def random_one(self) -> Optional[T_MODEL]:
-        result = await self.database.execute(
+        result = await self.model_cls.database.execute(
             self.options.as_select_option(
-                self.table.select().order_by(func.random()),
+                self.model_cls.table.select().order_by(func.random()),
             ),
         )
         if result_one := result.fetchone():
@@ -245,56 +247,60 @@ class QuerySet(QuerySetProtocol, Generic[T_MODEL]):
 
     async def paginate(self, page: int, page_size: int) -> List[T_MODEL]:
         if page < 1 or page_size < 1:
-            raise ValueError("page and page_size must be positive")
+            raise PaginateArgError("page and page_size must be positive")
         self.options.limit = page_size
         self.options.offset = (page - 1) * page_size
         return await self.all()
 
     async def delete(self) -> int:
-        result = await self.database.execute(
-            self.table.delete().where(*self.options.filter),
+        result = await self.model_cls.database.execute(
+            self.model_cls.table.delete().where(*self.options.filter),
         )
         return result.rowcount
 
     async def update(self, **kwargs: Any) -> int:
         values = validate_fields(self.model_cls, kwargs)
-        result = await self.database.execute(
-            self.table.update().values(**values),
+        result = await self.model_cls.database.execute(
+            self.model_cls.table.update().values(**values),
         )
         return result.rowcount
 
     async def count(self) -> int:
-        result = await self.database.execute(
-            select(func.count()).select_from(self.table).where(*self.options.filter),
+        result = await self.model_cls.database.execute(
+            select(func.count())
+            .select_from(self.model_cls.table)
+            .where(*self.options.filter),
         )
         return result.scalar()  # type: ignore
 
     async def exists(self) -> bool:
-        result = await self.database.execute(
-            select(exists().select_from(self.table).where(*self.options.filter)),
+        result = await self.model_cls.database.execute(
+            select(
+                exists().select_from(self.model_cls.table).where(*self.options.filter),
+            ),
         )
         return result.scalar()  # type: ignore
 
     async def max(self, column: T) -> Optional[T]:
-        result = await self.database.execute(
+        result = await self.model_cls.database.execute(
             self.options.as_select_option(select(func.max(column))),
         )
         return result.scalar()
 
     async def min(self, column: T) -> Optional[T]:
-        result = await self.database.execute(
+        result = await self.model_cls.database.execute(
             self.options.as_select_option(select(func.min(column))),
         )
         return result.scalar()
 
     async def avg(self, column: T) -> Optional[T]:
-        result = await self.database.execute(
+        result = await self.model_cls.database.execute(
             self.options.as_select_option(select(func.avg(column))),
         )
         return result.scalar()
 
     async def sum(self, column: T) -> Optional[T]:
-        result = await self.database.execute(
+        result = await self.model_cls.database.execute(
             self.options.as_select_option(select(func.sum(column))),
         )
         return result.scalar()
@@ -327,6 +333,19 @@ class QuerySet(QuerySetProtocol, Generic[T_MODEL]):
             else:
                 if related_one := related_data.fetchone():
                     now_data[name] = related_one._asdict()
+        for name, rfield in self.options.many_to_many_fields.items():
+            related_data = await self.model_cls.database.execute(
+                rfield.table.select().where(
+                    getattr(
+                        rfield.table.c,
+                        rfield.m2m_table_field,
+                    )
+                    == getattr(self.model_cls, rfield.m2m_field),
+                ),
+            )
+            now_data[name] = [
+                related_one._asdict() for related_one in related_data.fetchall()
+            ]
 
     async def _fetch_many_related(self, now_datas: List[Dict[str, Any]]):
         for name, rfield in self.options.related_fields.items():
@@ -348,8 +367,8 @@ class QuerySet(QuerySetProtocol, Generic[T_MODEL]):
                     None,
                 )
                 if data[name] is None and not rfield.nullable:
-                    raise ValueError(
-                        f"No matching data for {self.model_cls.__name__}.{name}",
+                    raise NoMatchDataError(
+                        f"No matching data for {self.model_cls}.{name}",
                     )
         for name, rfield in self.options.reverse_related_fields.items():
             target_field = rfield.related_field
@@ -374,6 +393,23 @@ class QuerySet(QuerySetProtocol, Generic[T_MODEL]):
                     data[name] = rd
                 elif rd:
                     data[name] = rd[0]
+        for name, rfield in self.options.many_to_many_fields.items():
+            related_values = [data[rfield.m2m_field] for data in now_datas]
+            related_data = await self.model_cls.database.execute(
+                rfield.table.select().where(
+                    getattr(
+                        rfield.table.c,
+                        rfield.m2m_table_field,
+                    ).in_(related_values),
+                ),
+            )
+            related_datas = [rd._asdict() for rd in related_data.fetchall()]
+            for data in now_datas:
+                data[name] = [
+                    related_data
+                    for related_data in related_datas
+                    if related_data[rfield.m2m_table_field] == data[rfield.m2m_field]
+                ]
 
 
 class ValuesQuerySet(QuerySetProtocol, Generic[T, Unpack[Ts]]):
@@ -388,32 +424,33 @@ class ValuesQuerySet(QuerySetProtocol, Generic[T, Unpack[Ts]]):
         self.querys = querys
         self.model_cls = model_cls
         self.options = options
-        self.database = model_cls.__meta__.database
 
     async def first(self) -> Optional[Tuple[T, Unpack[Ts]]]:
-        result = await self.database.execute(
+        result = await self.model_cls.database.execute(
             self.options.as_select_option(select(self.query1, *self.querys)),
         )
         if result_one := result.fetchone():
             return result_one._tuple()
         return None
 
-    async def get(self) -> Optional[Tuple[T, Unpack[Ts]]]:
+    async def get(self) -> Tuple[T, Unpack[Ts]]:
         results = await self.all()
         if len(results) > 1:
-            raise ValueError("More than one result")
+            raise MultipleDataError(
+                f"{self.model_cls} expect one data, but got {len(results)} datas",
+            )
         if len(results) == 1:
             return results[0]
-        return None
+        raise NoMatchDataError(f"No match data for {self.model_cls}")
 
     async def all(self) -> List[Tuple[T, Unpack[Ts]]]:
-        result = await self.database.execute(
+        result = await self.model_cls.database.execute(
             self.options.as_select_option(select(self.query1, *self.querys)),
         )
         return [result_one._tuple() for result_one in result.fetchall()]
 
     async def random_one(self) -> Optional[Tuple[T, Unpack[Ts]]]:
-        result = await self.database.execute(
+        result = await self.model_cls.database.execute(
             self.options.as_select_option(
                 select(self.query1, *self.querys).order_by(func.random()),
             ),
@@ -424,7 +461,7 @@ class ValuesQuerySet(QuerySetProtocol, Generic[T, Unpack[Ts]]):
 
     async def paginate(self, page: int, page_size: int) -> List[Tuple[T, Unpack[Ts]]]:
         if page < 1 or page_size < 1:
-            raise ValueError("page and page_size must be positive")
+            raise PaginateArgError("page and page_size must be positive")
         self.options.limit = page_size
         self.options.offset = (page - 1) * page_size
         return await self.all()
@@ -440,32 +477,33 @@ class ValueQuerySet(QuerySetProtocol, Generic[T]):
         self.query = query
         self.model_cls = model_cls
         self.options = options
-        self.database = model_cls.__meta__.database
 
     async def first(self) -> Optional[T]:
-        result = await self.database.execute(
+        result = await self.model_cls.database.execute(
             self.options.as_select_option(select(self.query)),
         )
         if result_one := result.fetchone():
             return result_one._tuple()[0]
         return None
 
-    async def get(self) -> Optional[T]:
+    async def get(self) -> T:
         results = await self.all()
         if len(results) > 1:
-            raise ValueError("More than one result")
+            raise MultipleDataError(
+                f"{self.model_cls} expect one data, but got {len(results)} datas",
+            )
         if len(results) == 1:
             return results[0]
-        return None
+        raise NoMatchDataError(f"No match data for {self.model_cls}")
 
     async def all(self) -> List[T]:
-        result = await self.database.execute(
+        result = await self.model_cls.database.execute(
             self.options.as_select_option(select(self.query)),
         )
         return [result_one._tuple()[0] for result_one in result.fetchall()]
 
     async def random_one(self) -> Optional[T]:
-        result = await self.database.execute(
+        result = await self.model_cls.database.execute(
             self.options.as_select_option(select(self.query)).order_by(func.random()),
         )
         if result_one := result.fetchone():
@@ -474,7 +512,7 @@ class ValueQuerySet(QuerySetProtocol, Generic[T]):
 
     async def paginate(self, page: int, page_size: int) -> List[T]:
         if page < 1 or page_size < 1:
-            raise ValueError("page and page_size must be positive")
+            raise PaginateArgError("page and page_size must be positive")
         self.options.limit = page_size
         self.options.offset = (page - 1) * page_size
         return await self.all()
@@ -490,32 +528,33 @@ class ValueDictQuerySet(QuerySetProtocol):
         self.querys = querys
         self.model_cls = model_cls
         self.options = options
-        self.database = model_cls.__meta__.database
 
     async def first(self) -> Optional[Dict[str, Any]]:
-        result = await self.database.execute(
+        result = await self.model_cls.database.execute(
             self.options.as_select_option(select(*self.querys)),
         )
         if result_one := result.fetchone():
             return result_one._asdict()
         return None
 
-    async def get(self) -> Optional[Dict[str, Any]]:
+    async def get(self) -> Dict[str, Any]:
         results = await self.all()
         if len(results) > 1:
-            raise ValueError("More than one result")
+            raise MultipleDataError(
+                f"{self.model_cls} expect one data, but got {len(results)} datas",
+            )
         if len(results) == 1:
             return results[0]
-        return None
+        raise NoMatchDataError(f"No match data for {self.model_cls}")
 
     async def all(self) -> List[Dict[str, Any]]:
-        result = await self.database.execute(
+        result = await self.model_cls.database.execute(
             self.options.as_select_option(select(*self.querys)),
         )
         return [result_one._asdict() for result_one in result.fetchall()]
 
     async def random_one(self) -> Optional[Dict[str, Any]]:
-        result = await self.database.execute(
+        result = await self.model_cls.database.execute(
             self.options.as_select_option(select(*self.querys)).order_by(func.random()),
         )
         if result_one := result.fetchone():
@@ -524,7 +563,7 @@ class ValueDictQuerySet(QuerySetProtocol):
 
     async def paginate(self, page: int, page_size: int) -> List[Dict[str, Any]]:
         if page < 1 or page_size < 1:
-            raise ValueError("page and page_size must be positive")
+            raise PaginateArgError("page and page_size must be positive")
         self.options.limit = page_size
         self.options.offset = (page - 1) * page_size
         return await self.all()
@@ -540,10 +579,9 @@ class CoalesceQuerySet(QuerySetProtocol, Generic[Unpack[Ts]]):
         self.columns = columns
         self.model_cls = model_cls
         self.options = options
-        self.database = model_cls.__meta__.database
 
     async def first(self) -> Union[Unpack[Ts], None]:
-        result = await self.database.execute(
+        result = await self.model_cls.database.execute(
             self.options.as_select_option(select(*self.columns)),
         )
         if result_one := result.fetchone():
@@ -553,19 +591,21 @@ class CoalesceQuerySet(QuerySetProtocol, Generic[Unpack[Ts]]):
     async def get(self) -> Union[Unpack[Ts], None]:
         results = await self.all()
         if len(results) > 1:
-            raise ValueError("More than one result")
+            raise MultipleDataError(
+                f"{self.model_cls} expect one data, but got {len(results)} datas",
+            )
         if len(results) == 1:
             return results[0]
-        return None
+        raise NoMatchDataError(f"No match data for {self.model_cls}")
 
     async def all(self) -> List[Union[Unpack[Ts], None]]:
-        result = await self.database.execute(
+        result = await self.model_cls.database.execute(
             self.options.as_select_option(select(func.coalesce(*self.columns))),
         )
         return [result_one[0] for result_one in result.fetchall()]
 
     async def random_one(self) -> Union[Unpack[Ts], None]:
-        result = await self.database.execute(
+        result = await self.model_cls.database.execute(
             self.options.as_select_option(select(*self.columns)).order_by(
                 func.random(),
             ),
@@ -580,7 +620,7 @@ class CoalesceQuerySet(QuerySetProtocol, Generic[Unpack[Ts]]):
         page_size: int,
     ) -> List[Union[Unpack[Ts], None]]:
         if page < 1 or page_size < 1:
-            raise ValueError("page and page_size must be positive")
+            raise PaginateArgError("page and page_size must be positive")
         self.options.limit = page_size
         self.options.offset = (page - 1) * page_size
         return await self.all()

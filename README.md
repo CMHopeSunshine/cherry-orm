@@ -40,7 +40,7 @@ from datetime import date
 from typing import Optional
 
 from cherry import Database, Field, ForeignKey, Model, ReverseRelated
-from cherry.fields import AutoIncrementIntPrimaryKey, PrimaryKey
+from cherry.fields import AutoIntPK, PrimaryKey
 
 database = Database("sqlite+aiosqlite:///:memory:")
 """创建一个数据库实例对象，传入数据库连接字符串"""
@@ -62,7 +62,7 @@ class School(Model):
 
 
 class Class(Model):
-    id: AutoIncrementIntPrimaryKey = None
+    id: AutoIntPK = None
     """自增主键的简便写法"""
     name: str
     school: ForeignKey[Optional[School]]
@@ -135,17 +135,17 @@ async def main():
     student2 = await Student.filter(
         Student.name == "student 2",
     ).get()  # 取第一个，如果没有则抛出异常
-    student3 = await Student.query().random_one()  # 取随机一个
+    student3 = await Student.select().random_one()  # 取随机一个
     student_data_tuple = (
         await Student.filter(Student.name == "student 3")
         .values(Student.name, Student.job)
         .first()
     )  # 只取部分字段，以元组返回
     student_data_dict = (
-        await Student.query().value_dict(Student.name, Student.age).first()
+        await Student.select().value_dict(Student.name, Student.age).first()
     )  # 只取部分字段，以字典返回
     student_names = (
-        await Student.query().values(Student.name, flatten=True).all()
+        await Student.select().values(Student.name, flatten=True).all()
     )  # 只取其中某个字段，以值或值列表返回
 
     # 关联查询
@@ -160,15 +160,15 @@ async def main():
         .first()
     )
     students_and_his_class = (
-        await Student.query().prefetch_related(Student.class_).all()
+        await Student.select().prefetch_related(Student.class_).all()
     )
 
     # 聚合查询
     count = await Student.filter(Student.age >= 15).count()
     max_age = await Student.filter(Class.name == "class 2").max(Student.age)
-    avg_age = await Student.query().avg(Student.age)
-    sum_age = await Student.query().sum(Student.age)
-    await Student.query().offset(2).limit(3).order_by(Student.age).all()
+    avg_age = await Student.select().avg(Student.age)
+    sum_age = await Student.select().sum(Student.age)
+    await Student.select().offset(2).limit(3).order_by(Student.age).all()
 
     # 查询并更新、删除
     await School.filter(School.name == "school 1").update(built_date=date.today())
@@ -178,4 +178,5 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 ```
