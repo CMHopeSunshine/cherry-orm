@@ -1,7 +1,7 @@
 import inspect
 from typing import Any
 
-from cherry.helpers import classproperty
+from cherry.fields.utils import classproperty
 
 from pydantic import BaseConfig
 

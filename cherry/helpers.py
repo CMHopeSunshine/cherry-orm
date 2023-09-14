@@ -1,8 +1,6 @@
-from typing import TypeVar
+from cherry.typing import T
 
 from sqlalchemy import Column
-
-T = TypeVar("T")
 
 
 def cast_column(arg: T) -> Column[T]:

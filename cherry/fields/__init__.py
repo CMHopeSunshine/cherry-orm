@@ -6,7 +6,7 @@ from .annotated import (
     Index as Index,
     ManyToMany as ManyToMany,
     PrimaryKey as PrimaryKey,
-    ReverseRelated as ReverseRelated,
+    ReverseRelation as ReverseRelation,
     Unique as Unique,
 )
 from .fields import (

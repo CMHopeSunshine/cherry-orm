@@ -6,7 +6,6 @@ from typing import (
     Optional,
     Tuple,
     Type,
-    TYPE_CHECKING,
 )
 
 from cherry.database import Database
@@ -18,9 +17,6 @@ from cherry.fields.fields import (
 
 from sqlalchemy import Column, MetaData, Table
 from sqlalchemy.sql.schema import ColumnCollectionConstraint
-
-if TYPE_CHECKING:
-    pass
 
 
 class MetaConfig:

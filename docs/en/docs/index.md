@@ -2,9 +2,9 @@
 
 ### Overview
 
-`Cherry ORM` is an asynchronous object relational mapping (ORM) library for Python. It is based on [SQLAlchemy Core](https://www.sqlalchemy.org/) and [Pydantic V1](https://docs.pydantic.dev/1.10/), Support for common relational databases such as `sqlite`, `mysql`, `postgresql`, etc.
+`Cherry ORM` is an asynchronous object relational mapping (ORM) library for Python. It is based on [SQLAlchemy Core](https://www.sqlalchemy.org/) and [Pydantic V1](https://docs.pydantic.dev/1.10/).
 
-It is designed to provide simple and convenient database operations such as adding, deleting, correcting and checking, improve development efficiency, and let developers focus more on the implementation of business logic.
+All of its design is designed to be simple and easy to use, greatly reducing the cost of database operation for developers, improving development efficiency, and allowing developers to focus more on the implementation of business logic.
 
 ### Feature
 

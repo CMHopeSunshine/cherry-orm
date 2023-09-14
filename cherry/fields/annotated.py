@@ -1,9 +1,9 @@
-from typing import Optional, TypeVar
+from typing import Optional
 from typing_extensions import Annotated
 
-from .fields import Field, Relationship
+from cherry.typing import T
 
-T = TypeVar("T")
+from .fields import Field, Relationship
 
 PrimaryKey = Annotated[T, Field(primary_key=True)]
 """Primary Key Field"""
@@ -27,7 +27,7 @@ Unique = Annotated[T, Field(unique=True)]
 
 ForeignKey = Annotated[T, Relationship(foreign_key=True)]
 """Foreign Key Relationship Field"""
-ReverseRelated = Annotated[T, Relationship(reverse_related=True)]
+ReverseRelation = Annotated[T, Relationship(reverse_related=True)]
 """Reverse Related Relationship Field"""
 ManyToMany = Annotated[T, Relationship(many_to_many=True)]
 """Many To Many Relationship Field"""

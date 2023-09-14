@@ -14,7 +14,7 @@ theme:
     - navigation.footer
     - navigation.instant
     - navigation.tracking
-    - navigation.sections
+    # - navigation.sections
     - navigation.path
     - navigation.top
     - search.suggest
@@ -55,12 +55,28 @@ markdown_extensions:
       line_spans: __span
       pygments_lang_class: true
   - pymdownx.inlinehilite
-  - pymdownx.snippets
+  - pymdownx.snippets:
+      base_path: ../src
   - pymdownx.superfences
   - pymdownx.details
   - pymdownx.tabbed:
       alternate_style: true
 
+nav:
+  - 概述: index.md
+  - 安装: install.md
+  - 快速开始: quick-start.md
+  - 教程:
+      - 模型定义: tutorial/definition.md
+      - 增删改查:
+          - 插入: tutorial/crud/insert.md
+          - 更新: tutorial/crud/update.md
+          - 删除: tutorial/crud/delete.md
+          - 查询: tutorial/crud/query.md
+          - 聚合查询: tutorial/crud/aggregation.md
+      - 模型关系:
+          - 定义: tutorial/relation/difinition.md
+          - 查询: tutorial/relation/query.md
 
 extra:
   alternate:

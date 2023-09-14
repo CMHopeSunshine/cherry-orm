@@ -1,15 +1,17 @@
+import asyncio
+from functools import reduce
 from typing import (
     Any,
     cast,
     ClassVar,
-    Dict,
     ForwardRef,
     List,
-    Mapping,
     Optional,
+    overload,
     Tuple,
     Type,
     TYPE_CHECKING,
+    Union,
 )
 from typing_extensions import dataclass_transform, Self
 
@@ -17,8 +19,11 @@ from cherry.database import Database
 from cherry.exception import *
 from cherry.fields.fields import (
     BaseField,
+    Field,
     ForeignKeyField,
     ManyToManyField,
+    Relationship,
+    RelationshipField,
     ReverseRelationshipField,
 )
 from cherry.fields.types import get_sqlalchemy_type_from_field
@@ -26,21 +31,23 @@ from cherry.fields.utils import classproperty
 from cherry.meta.meta import init_meta_config, MetaConfig, mix_meta_config
 from cherry.meta.pydantic_config import generate_pydantic_config
 from cherry.queryset.queryset import QuerySet
+from cherry.typing import AnyMapping, DictStrAny
 
 from pydantic import PrivateAttr
-from pydantic.fields import Field, FieldInfo
+from pydantic.fields import FieldInfo
 from pydantic.main import BaseModel, ModelMetaclass
 from sqlalchemy import Column, ForeignKey, MetaData, Table
 from sqlalchemy.sql.elements import ColumnElement
+from sqlalchemy.sql.operators import and_
 
 
-@dataclass_transform(kw_only_default=True, field_specifiers=(Field, FieldInfo))
+@dataclass_transform(kw_only_default=True, field_specifiers=(Field, Relationship))
 class ModelMeta(ModelMetaclass):
     def __new__(
         cls: type["ModelMeta"],
         name: str,
         bases: Tuple[Type[Any], ...],
-        attrs: Dict[str, Any],
+        attrs: DictStrAny,
         **kwargs: Any,
     ) -> "ModelMeta":
         generate_pydantic_config(attrs)
@@ -73,9 +80,14 @@ class ModelMeta(ModelMetaclass):
                 )
             field_info = model_field.field_info
             if isinstance(field_info, BaseField):
-                field_info.nullable = model_field.allow_none
-            elif isinstance(field_info, (ReverseRelationshipField, ForeignKeyField)):
-                field_info.nullable = model_field.allow_none
+                if field_info.nullable is None:
+                    field_info.nullable = model_field.allow_none
+            elif isinstance(
+                field_info,
+                RelationshipField,
+            ):
+                if field_info.nullable is None:
+                    field_info.nullable = model_field.allow_none
                 field_info.related_model = model_field.type_  # type: ignore
             else:
                 raise FieldTypeError(
@@ -87,15 +99,63 @@ class ModelMeta(ModelMetaclass):
 
         if not meta_config.abstract and hasattr(meta_config, "database"):
             meta_config.database.add_model(new_cls)
+            meta_config.primary_key = tuple(
+                field.name
+                for field in new_cls.__fields__.values()
+                if isinstance(field.field_info, BaseField)
+                and field.field_info.primary_key
+            )
+            if len(meta_config.primary_key) == 0:
+                raise PrimaryKeyMissingError(
+                    f"Model {new_cls} must have at least one primary key",
+                )
 
         return new_cls
+
+    @overload
+    def __eq__(self, other: "Model") -> ColumnElement:
+        ...
+
+    @overload
+    def __eq__(self, other: Any) -> bool:
+        ...
+
+    def __eq__(
+        self,
+        other: Any,
+    ) -> Union[bool, ColumnElement]:
+        if isinstance(other, Model):
+            field = self._get_field_type_by_model(other)  # type: ignore
+            if isinstance(field, ForeignKeyField):
+                return getattr(self, field.foreign_key_self_name) == getattr(
+                    other,
+                    field.foreign_key,
+                )
+            elif isinstance(field, ReverseRelationshipField) and not field.is_list:
+                # if other._check_pk_null():
+                #     raise PrimaryKeyMissingError(
+                #         "Primary key can not be null when filter",
+                #     )
+                return other.get_pk_filter()
+            else:
+                raise FieldTypeError(f"cannnot use equal operator on {type(field)}")
+        return super().__eq__(other)
+
+    def __hash__(self):
+        return super().__hash__()
 
 
 class Model(BaseModel, metaclass=ModelMeta):
     if TYPE_CHECKING:
         __meta__: ClassVar[Type[MetaConfig]]
 
-    __foreign_key_values__: Dict[str, Any] = PrivateAttr(default_factory=dict)
+    if TYPE_CHECKING:
+        __cherry_foreign_key_values__: DictStrAny = Field(
+            default_factory=dict,
+            init=False,
+        )
+    else:
+        __cherry_foreign_key_values__: DictStrAny = PrivateAttr(default_factory=dict)
 
     @classproperty
     def tablename(cls) -> str:
@@ -122,109 +182,183 @@ class Model(BaseModel, metaclass=ModelMeta):
             return cls._generate_sqlalchemy_table(cls.database._metadata)
         return cls.__meta__.table
 
-    async def insert(self) -> Self:
+    async def insert(self, exclude_related: bool = False) -> Self:
         """insert model into database and update primary key"""
-        result = await self.database.execute(
-            self.table.insert().values(
-                **self._extract_db_fields(),
-            ),
-        )
-        if result.inserted_primary_key:
-            self.update_from_dict(result.inserted_primary_key._asdict())
+        async with self.database as conn:
+            result = await conn.execute(
+                self.table.insert().values(
+                    **self._extract_db_fields(exclude_related=exclude_related),
+                ),
+            )
+            if result.inserted_primary_key:
+                self.update_from_dict(result.inserted_primary_key._asdict())
+            if not exclude_related:
+                for name, rfield in self.__meta__.reverse_related_fields.items():
+                    if related_values := getattr(self, name, None):
+                        related_values = cast(List[Model], related_values)
+                        await asyncio.gather(
+                            *[
+                                value.update(**{rfield.related_field_name: self})
+                                for value in related_values
+                            ],
+                        )
+        return self
+
+    async def insert_with_related(self, *args: Any) -> Self:
+        await self.insert(exclude_related=True)
+        table_names = self._get_related_tables(*args)
+        async with self.database as conn:
+            for name, rfield in self.__meta__.related_fields.items():
+                if (
+                    table_names is not None
+                    and rfield.related_model.tablename not in table_names
+                ):
+                    continue
+                if (related_value := getattr(self, name, None)) and isinstance(
+                    related_value,
+                    Model,
+                ):
+                    await related_value.insert()
+                    # this results in recursive references to the model
+                    # if rfield.related_field_name is not None:
+                    #     value_related_field = getattr(
+                    #         related_value,
+                    #         rfield.related_field_name,
+                    #         None,
+                    #     )
+                    #     if isinstance(value_related_field, list):
+                    #         value_related_field.append(self)
+                    #     else:
+                    #         setattr(related_value, rfield.related_field_name, [self])
+
+                else:
+                    raise FieldTypeError(
+                        f"Related field {self.__class__}.{name} must be a Model",
+                    )
+
+            for name, rfield in self.__meta__.reverse_related_fields.items():
+                if (
+                    table_names is not None
+                    and rfield.related_model.tablename not in table_names
+                ):
+                    continue
+                if related_value := getattr(self, name, None):
+                    if rfield.is_list:
+                        if isinstance(related_value, list) and all(
+                            isinstance(v, Model) for v in related_value
+                        ):
+                            await rfield.related_model.insert_many(*related_value)
+                        else:
+                            raise FieldTypeError(
+                                (
+                                    f"Related field {self.__class__}.{name} must be a"
+                                    " list of Model"
+                                ),
+                            )
+                    else:
+                        if isinstance(related_value, Model):
+                            await related_value.insert()
+                        else:
+                            raise FieldTypeError(
+                                (
+                                    f"Related field {self.__class__}.{name} must be a"
+                                    " Model"
+                                ),
+                            )
+
+            for name, rfield in self.__meta__.many_to_many_fields.items():
+                if (
+                    table_names is not None
+                    and rfield.related_model.tablename not in table_names
+                ):
+                    continue
+                if related_value := getattr(self, name, None):
+                    if isinstance(related_value, list) and all(
+                        isinstance(v, Model) for v in related_value
+                    ):
+                        insert_values = [
+                            {
+                                rfield.m2m_table_field_name: getattr(
+                                    self,
+                                    rfield.m2m_field_name,
+                                ),
+                                rfield.related_field.m2m_table_field_name: getattr(
+                                    v,
+                                    rfield.related_field.m2m_field_name,
+                                ),
+                            }
+                            for v in related_value
+                        ]
+                        await conn.execute(
+                            rfield.table.insert(),
+                            insert_values,
+                        )
+                    else:
+                        raise FieldTypeError(
+                            (
+                                f"Related field {self.__class__}.{name} must be a list"
+                                " of Model"
+                            ),
+                        )
+
         return self
 
     async def update(self, **kwargs: Any) -> Self:
         """update model with given data"""
-        if self._check_pk_null():
-            raise PrimaryKeyMissingError("Primary key can not be null when update")
-        self.update_from_dict(kwargs)
-        await self.database.execute(
-            self.table.update()
-            .values(**self._extract_db_fields(exclude_pk=True))
-            .where(*self.pk_filter),
-        )
+        async with self.database as conn:
+            if self._check_pk_null():
+                raise PrimaryKeyMissingError("Primary key can not be null when update")
+            self.update_from_dict(kwargs)
+            await conn.execute(
+                self.table.update()
+                .where(self.get_pk_filter())
+                .values(**self._extract_db_fields(exclude_pk=True)),
+            )
         return self
 
-    async def fetch(self) -> Self:
+    async def fetch(self, related: bool = False) -> Self:
         """fetch data from database by primary key"""
-        if self._check_pk_null():
-            raise PrimaryKeyMissingError("Primary key can not be null when fetch")
-        result = await self.database.execute(
-            self.table.select().where(*self.pk_filter),
-        )
-        if result_one := result.fetchone():
-            self.update_from_dict(result_one._asdict())
+        async with self.database as conn:
+            if self._check_pk_null():
+                raise PrimaryKeyMissingError("Primary key can not be null when fetch")
+            result = await conn.execute(
+                self.table.select().where(self.get_pk_filter()),
+            )
+            if result_one := result.fetchone():
+                self.update_from_dict(result_one._asdict())
+            if related:
+                await self.fetch_related()
         return self
 
-    async def fetch_related(self, *tables: Any) -> Self:
+    async def fetch_related(self, *args: Any) -> Self:
         """fetch related data from database by related field"""
-        table_names = self._get_related_tables(*tables)
-        for name, rfield in self.__meta__.related_fields.items():
-            if (
-                table_names is not None
-                and rfield.related_model.tablename not in table_names
-            ):
-                continue
-            if rfield.foreign_key_self_name not in self.__foreign_key_values__:
-                raise RelatedFieldMissingError(
-                    (
-                        "Can not fetch related model if not been inserted into or"
-                        " fetched from database"
+        self_dict = self._extract_db_fields(exclude_related=True)
+        async with self.database as conn:
+            table_names = self._get_related_tables(*args)
+            for name, rfield in self.__meta__.related_fields.items():
+                if (
+                    table_names is not None
+                    and rfield.related_model.tablename not in table_names
+                ):
+                    continue
+                if (
+                    rfield.foreign_key_self_name
+                    not in self.__cherry_foreign_key_values__
+                ):
+                    raise RelatedFieldMissingError(
+                        (
+                            "Can not fetch related model if not been inserted into or"
+                            " fetched from database"
+                        ),
+                    )
+                related_data = await conn.execute(
+                    rfield.related_model.table.select().where(
+                        getattr(rfield.related_model, rfield.foreign_key)
+                        == self.__cherry_foreign_key_values__[
+                            rfield.foreign_key_self_name
+                        ],
                     ),
                 )
-            related_data = await self.database.execute(
-                rfield.related_model.table.select().where(
-                    getattr(rfield.related_model, rfield.foreign_key)
-                    == self.__foreign_key_values__[rfield.foreign_key_self_name],
-                ),
-            )
-            if related_one := related_data.fetchone():
-                setattr(
-                    self,
-                    name,
-                    rfield.related_model.parse_from_db_dict(related_one._asdict()),
-                )
-            else:
-                if rfield.nullable:
-                    setattr(self, name, None)
-                else:
-                    raise NoMatchDataError(
-                        f"No matching data for {self.__class__}.{name}",
-                    )
-
-        for name, rfield in self.__meta__.reverse_related_fields.items():
-            if (
-                table_names is not None
-                and rfield.related_model.tablename not in table_names
-            ):
-                continue
-            foreign_key_value = getattr(self, rfield.related_field.foreign_key, None)
-            if foreign_key_value is None:
-                raise RelatedFieldMissingError(
-                    (
-                        "Can not fetch related model if not been inserted into or"
-                        " fetched from database"
-                    ),
-                )
-            related_data = await self.database.execute(
-                rfield.related_model.table.select().where(
-                    getattr(
-                        rfield.related_model,
-                        rfield.related_field_name,
-                    )
-                    == foreign_key_value,
-                ),
-            )
-            if rfield.is_list:
-                setattr(
-                    self,
-                    name,
-                    [
-                        rfield.related_model.parse_from_db_dict(related_one._asdict())
-                        for related_one in related_data.fetchall()
-                    ],
-                )
-            else:
                 if related_one := related_data.fetchone():
                     setattr(
                         self,
@@ -238,94 +372,160 @@ class Model(BaseModel, metaclass=ModelMeta):
                         raise NoMatchDataError(
                             f"No matching data for {self.__class__}.{name}",
                         )
-        for name, field in self.__meta__.many_to_many_fields.items():
-            if (
-                table_names is not None
-                and field.related_model.tablename not in table_names
-            ):
-                continue
-            m2m_field_value = getattr(self, field.m2m_field, None)
-            if m2m_field_value is None:
-                raise RelatedFieldMissingError(
-                    (
-                        "Can not fetch related model if not been inserted into or"
-                        " fetched from database"
+
+            for name, rfield in self.__meta__.reverse_related_fields.items():
+                if (
+                    table_names is not None
+                    and rfield.related_model.tablename not in table_names
+                ):
+                    continue
+                foreign_key_value = getattr(
+                    self,
+                    rfield.related_field.foreign_key,
+                    None,
+                )
+                if foreign_key_value is None:
+                    raise RelatedFieldMissingError(
+                        (
+                            "Can not fetch related model if not been inserted into or"
+                            " fetched from database"
+                        ),
+                    )
+                related_data = await conn.execute(
+                    rfield.related_model.table.select().where(
+                        getattr(
+                            rfield.related_model,
+                            rfield.related_field.foreign_key_self_name,
+                        )
+                        == foreign_key_value,
                     ),
                 )
-            related_data = await self.database.execute(
-                field.table.select().where(
-                    getattr(
-                        field.table.c,
-                        f"{self.tablename}_{field.m2m_field}",
+                if rfield.is_list:
+                    setattr(
+                        self,
+                        name,
+                        [
+                            rfield.related_model.parse_from_db_dict(
+                                (
+                                    {
+                                        **related_one._asdict(),
+                                        rfield.related_field_name: self_dict,
+                                    }
+                                ),
+                            )
+                            for related_one in related_data.fetchall()
+                        ],
                     )
-                    == m2m_field_value,
-                ),
-            )
-            setattr(
-                self,
-                name,
-                [
-                    field.related_model.parse_from_db_dict(related_one._asdict())
-                    for related_one in related_data.fetchall()
-                ],
-            )
+                else:
+                    if related_one := related_data.fetchone():
+                        setattr(
+                            self,
+                            name,
+                            rfield.related_model.parse_from_db_dict(
+                                (
+                                    {
+                                        **related_one._asdict(),
+                                        rfield.related_field_name: self_dict,
+                                    }
+                                ),
+                            ),
+                        )
+                    else:
+                        if rfield.nullable:
+                            setattr(self, name, None)
+                        else:
+                            raise NoMatchDataError(
+                                f"No matching data for {self.__class__}.{name}",
+                            )
+            for name, field in self.__meta__.many_to_many_fields.items():
+                if (
+                    table_names is not None
+                    and field.related_model.tablename not in table_names
+                ):
+                    continue
+                m2m_field_value = getattr(self, field.m2m_field_name, None)
+                if m2m_field_value is None:
+                    raise RelatedFieldMissingError(
+                        (
+                            "Can not fetch related model if not been inserted into or"
+                            " fetched from database"
+                        ),
+                    )
+                related_data = await conn.execute(
+                    field.related_model.table.select()
+                    .select_from(field.related_model.table.join(field.table))
+                    .join(self.table)
+                    .where(self.table.c[field.m2m_field_name] == m2m_field_value),
+                )
+                setattr(
+                    self,
+                    name,
+                    [
+                        field.related_model.parse_from_db_dict(related_one._asdict())
+                        for related_one in related_data.fetchall()
+                    ],
+                )
         return self
 
-    async def save(self) -> Self:
+    async def save(self):
         """if model has been inserted into database, update it, else insert it"""
-        if self._check_pk_null():
-            raise PrimaryKeyMissingError("Primary key can not be null when save")
-        fetch = await self.database.execute(
-            self.table.select().where(*self.pk_filter),
-        )
-        if fetch:
-            await self.update()
-        else:
-            return await self.insert()
-        return self
+        async with self.database as conn:
+            if self._check_pk_null():
+                raise PrimaryKeyMissingError("Primary key can not be null when save")
+            fetch = await conn.execute(
+                self.table.select().where(self.get_pk_filter()),
+            )
+            if fetch:
+                await self.update()
+            else:
+                await self.insert()
 
     async def delete(self) -> Self:
         """delete model from database"""
         if self._check_pk_null():
             raise PrimaryKeyMissingError("Primary key can not be null when delete")
-        await self.database.execute(
-            self.table.delete().where(*self.pk_filter),
-        )
+        async with self.database as conn:
+            await conn.execute(
+                self.table.delete().where(self.get_pk_filter()),
+            )
         return self
 
     @classmethod
-    async def insert_many(cls, *models: Self, need_pk_update: bool = False):
+    async def insert_many(cls, *models: Self):
         """insert many models into database"""
         if models:
-            if need_pk_update:
-                for model in models:
+            async with cls.database as conn:
+                has_pk_model = [model for model in models if not model._check_pk_null()]
+                no_pk_model = [model for model in models if model._check_pk_null()]
+                if has_pk_model:
+                    await conn.execute(
+                        cls.table.insert(),
+                        [model._extract_db_fields() for model in has_pk_model],
+                    )
+                for model in no_pk_model:
                     await model.insert()
-            else:
-                await cls.database.execute(
-                    cls.table.insert(),
-                    [model.dict(by_alias=True) for model in models],
-                )
-            return None
+                return None
         raise ModelMissingError("You must give at least one model to insert")
 
     @classmethod
     async def save_many(cls, *models: Self):
         """save many models into database"""
         if models:
-            for model in models:
-                await model.save()
-            return None
+            async with cls.database:
+                await asyncio.gather(*[model.save() for model in models])
+                return None
         raise ModelMissingError("You must give at least one model to save")
 
     @classmethod
     async def delete_many(cls, *models: Self) -> int:
         """delete many models from database"""
         if models:
-            result = await cls.database.execute(
-                cls.table.delete(),
-                [model.dict(by_alias=True) for model in models],
-            )
-            return result.rowcount
+            async with cls.database as conn:
+                result = await conn.execute(
+                    cls.table.delete(),
+                    [model.dict(by_alias=True) for model in models],
+                )
+                return result.rowcount
         raise ModelMissingError("You must give at least one model to delete")
 
     @classmethod
@@ -334,9 +534,9 @@ class Model(BaseModel, metaclass=ModelMeta):
         return QuerySet(cls)
 
     @classmethod
-    def filter(cls, *args: Any) -> QuerySet[Self]:
+    def filter(cls, *args: Any, **kwargs: Any) -> QuerySet[Self]:
         """query with any filter condition"""
-        return QuerySet(cls, filter=args)
+        return QuerySet(cls, *args, **kwargs)
 
     @classmethod
     def select_related(cls, *args: Any) -> QuerySet[Self]:
@@ -364,15 +564,15 @@ class Model(BaseModel, metaclass=ModelMeta):
         return await QuerySet(cls).random_one()
 
     @classmethod
-    async def get(cls, *args: Any) -> Self:
+    async def get(cls, *args: Any, **kwargs: Any) -> Self:
         """select one model with filter condition, if not exist, raise error"""
-        return await cls.filter(*args).get()
+        return await cls.filter(*args, **kwargs).get()
 
     @classmethod
-    async def get_or_none(cls, *args: Any) -> Optional[Self]:
+    async def get_or_none(cls, *args: Any, **kwargs: Any) -> Optional[Self]:
         """select one model with filter condition, if not exist, return None"""
         try:
-            return await cls.filter(*args).get()
+            return await cls.filter(*args, **kwargs).get()
         except NoMatchDataError:
             return None
 
@@ -380,17 +580,15 @@ class Model(BaseModel, metaclass=ModelMeta):
     async def get_or_create(
         cls,
         *args: Any,
-        defaults: Optional[Dict[str, Any]] = None,
+        defaults: Optional[DictStrAny] = None,
+        **kwargs: Any,
     ) -> Self:
         """select one model with filter condition, if not exist, create one"""
+        queryset = cls.filter(*args, **kwargs)
         try:
-            return await cls.filter(*args).get()
+            return await queryset.get()
         except NoMatchDataError:
-            create_values = {
-                arg.left.name: arg.right.value
-                for arg in args
-                if isinstance(arg, ColumnElement)
-            }
+            create_values = queryset.options.filter_to_dict()
             create_values.update(
                 {
                     (k.name if isinstance(k, Column) else k): v
@@ -403,19 +601,17 @@ class Model(BaseModel, metaclass=ModelMeta):
     async def update_or_create(
         cls,
         *args: Any,
-        defaults: Optional[Dict[str, Any]] = None,
+        defaults: Optional[DictStrAny] = None,
+        **kwargs: Any,
     ) -> Self:
         """update one model with filter condition,
         if not exist, create one with filter and defaults values"""
+        queryset = cls.filter(*args, **kwargs)
         try:
-            model = await cls.filter(*args).get()
+            model = await queryset.get()
             return await model.update(**(defaults or {}))
         except NoMatchDataError:
-            create_values = {
-                arg.left.name: arg.right.value
-                for arg in args
-                if isinstance(arg, ColumnElement)
-            }
+            create_values = queryset.options.filter_to_dict()
             create_values.update(
                 {
                     (k.name if isinstance(k, Column) else k): v
@@ -424,12 +620,78 @@ class Model(BaseModel, metaclass=ModelMeta):
             )
             return await cls(**create_values).insert()
 
-    @property
-    def pk_filter(self) -> Tuple[ColumnElement[bool], ...]:
+    async def add(self, model: "Model") -> Self:
+        field = self._get_field_type_by_model(model)
+        async with self.database as conn:
+            if isinstance(field, ManyToManyField):
+                await conn.execute(
+                    field.table.insert().values(
+                        {
+                            field.m2m_table_field_name: getattr(
+                                self,
+                                field.m2m_field_name,
+                            ),
+                            field.related_field.m2m_table_field_name: getattr(
+                                model,
+                                field.related_field.m2m_field_name,
+                            ),
+                        },
+                    ),
+                )
+                value = getattr(self, field.related_field.related_field_name)
+                if isinstance(value, list):
+                    value.append(model)
+                else:
+                    setattr(self, field.related_field.related_field_name, [model])
+            elif isinstance(field, ReverseRelationshipField) and field.is_list:
+                setattr(
+                    model,
+                    field.related_field_name,
+                    self,
+                )
+                await model.save()
+                value = getattr(self, field.related_field_name)
+                if isinstance(value, list):
+                    value.append(model)
+                else:
+                    setattr(self, field.related_field_name, [model])
+            else:
+                raise RelationSolveError(
+                    f"There are no related fields associated with {type(model)} to add",
+                )
+
+        return self
+
+    async def remove(self, model: "Model"):
+        field = self._get_field_type_by_model(model)
+        async with self.database as conn:
+            if isinstance(field, ManyToManyField):
+                await conn.execute(
+                    field.table.delete().where(
+                        field.table.c[field.m2m_table_field_name]
+                        == getattr(self, field.m2m_field_name),
+                    ),
+                )
+                getattr(self, field.related_field.related_field_name).remove(model)
+            elif isinstance(field, ReverseRelationshipField) and field.is_list:
+                await model.delete()
+                getattr(self, field.related_field_name).remove(model)
+            else:
+                raise RelationSolveError(
+                    (
+                        f"There are no related fields associated with {type(model)} to"
+                        " remove"
+                    ),
+                )
+
+    def get_pk_filter(self) -> ColumnElement[bool]:
         """generate primary key filter condition"""
-        return tuple(
-            getattr(self.__class__, pk) == getattr(self, pk)
-            for pk in self.__meta__.primary_key
+        return reduce(
+            and_,
+            (
+                getattr(self.__class__, pk) == getattr(self, pk)
+                for pk in self.__meta__.primary_key
+            ),
         )
 
     @classmethod
@@ -438,48 +700,63 @@ class Model(BaseModel, metaclass=ModelMeta):
         return tuple(getattr(cls, pk) for pk in cls.__meta__.primary_key)
 
     @classmethod
-    def parse_from_db_dict(cls, data: Dict[str, Any]) -> Self:
+    def parse_from_db_dict(cls, data: DictStrAny) -> Self:
         """parse model from database result dict"""
         model = cls.parse_obj(data)
         for foreign_key in cls.__meta__.foreign_keys:
-            model.__foreign_key_values__[foreign_key] = data.pop(foreign_key, None)
+            model.__cherry_foreign_key_values__[foreign_key] = data.pop(
+                foreign_key,
+                None,
+            )
         return model
 
-    def update_from_dict(self, update_data: Mapping[Any, Any]):
+    def update_from_dict(self, update_data: AnyMapping):
         """update model from dict"""
         for k, v in update_data.items():
             if k in self.__fields__:
                 setattr(self, k, v)
             elif k in self.__meta__.foreign_keys:
-                self.__foreign_key_values__[k] = v
+                self.__cherry_foreign_key_values__[k] = v
 
     def update_from_kwargs(self, **kwargs: Any):
         """update model from kwargs"""
         for k, v in kwargs.items():
             setattr(self, k, v)
 
-    def _extract_db_fields(self, exclude_pk: bool = False) -> Dict[str, Any]:
+    def _extract_db_fields(
+        self,
+        exclude_pk: bool = False,
+        exclude_related: bool = False,
+    ) -> DictStrAny:
         """extract database fields from model"""
         exclude = (
             self.__meta__.related_fields.keys()
             | self.__meta__.reverse_related_fields.keys()
+            | self.__meta__.many_to_many_fields.keys()
         )
         if exclude_pk:
             exclude |= set(self.__meta__.primary_key)
         data = self.dict(by_alias=True, exclude=exclude)
+        if exclude_related:
+            return data
         for field_name, field in self.__meta__.related_fields.items():
+            self_value = getattr(self, field_name)
+            if self_value is None:
+                data[field.foreign_key_self_name] = None
+                self.__cherry_foreign_key_values__[field.foreign_key_self_name] = None
+                continue
             value = getattr(
-                getattr(self, field_name),
+                self_value,
                 field.foreign_key,
             )
             data[field.foreign_key_self_name] = value
-            self.__foreign_key_values__[field.foreign_key_self_name] = value
+            self.__cherry_foreign_key_values__[field.foreign_key_self_name] = value
             if not field.nullable and not data[field.foreign_key_self_name]:
                 raise ForeignKeyMissingError(
                     (
-                        "Foreign key field"
-                        f" {self.tablename}.{field.foreign_key_self_name}cannot be None"
-                        " when insert or update"
+                        'Foreign key field'
+                        f' "{self.__class__}.{field.foreign_key_self_name}" cannot be'
+                        ' None when insert or update'
                     ),
                 )
         return data
@@ -497,7 +774,7 @@ class Model(BaseModel, metaclass=ModelMeta):
             field_info = field.field_info
             if isinstance(
                 field_info,
-                (ReverseRelationshipField, ForeignKeyField),
+                RelationshipField,
             ):
                 if isinstance(field_info.related_model, ForwardRef):
                     field_info.related_model = field.type_
@@ -542,6 +819,18 @@ class Model(BaseModel, metaclass=ModelMeta):
         return table_names
 
     @classmethod
+    def _get_field_type_by_model(cls, model: "Model") -> RelationshipField:
+        for field in cls.__fields__.values():
+            if isinstance(model, field.type_) and isinstance(
+                field.field_info,
+                RelationshipField,
+            ):
+                return field.field_info
+        raise FieldTypeError(
+            f"There are no related fields associated with {cls}.{model}",
+        )
+
+    @classmethod
     def _generate_sqlalchemy_column(cls):
         if any(f for f in cls.__fields__.values() if isinstance(f.type_, ForwardRef)):
             cls.update_forward_refs()
@@ -557,11 +846,11 @@ class Model(BaseModel, metaclass=ModelMeta):
                     unique=field_info.unique,
                     autoincrement=field_info.autoincrement,
                     default=field_info.default or field_info.default_factory or None,
-                    **field_info.sa_column_args,
+                    **field_info.sa_column_extra,
                 )
                 setattr(cls, model_field.name, cls.__meta__.columns[model_field.name])
             elif isinstance(field_info, ForeignKeyField):
-                if field_info.related_field_name is None:
+                if not hasattr(field_info, "related_field_name"):
                     for rname, rfield in field_info.related_model.__fields__.items():
                         if (
                             isinstance(rfield.field_info, ReverseRelationshipField)
@@ -605,14 +894,29 @@ class Model(BaseModel, metaclass=ModelMeta):
                             and field_info.related_field.on_update
                         )
                         or "NO ACTION",
+                        **field_info.foreign_key_extra,
                     ),
                     nullable=field_info.nullable,
+                    **field_info.sa_column_extra,
                 )
                 cls.__meta__.related_fields[model_field.name] = field_info
-                setattr(cls, model_field.name, cls.__meta__.columns[model_field.name])
+                setattr(cls, model_field.name, field_info.related_model)
+                setattr(
+                    cls,
+                    field_info.foreign_key_self_name,
+                    cls.__meta__.columns[model_field.name],
+                )
             elif isinstance(field_info, ReverseRelationshipField):
-                # from pydantic.fields.py
-                field_info.is_list = model_field.shape in (2, 3, 6, 7, 8, 9)
+                # from pydantic.fields.py, 2 is list
+                if model_field.shape == 2:
+                    field_info.is_list = True
+                elif model_field.shape != 1:
+                    raise FieldTypeError(
+                        (
+                            'ReverseRelationshipField must be a "cherry.Model" type or'
+                            ' alist of it'
+                        ),
+                    )
                 if not hasattr(field_info, "related_field_name"):
                     for rname, rfield in field_info.related_model.__fields__.items():
                         if (
@@ -639,33 +943,35 @@ class Model(BaseModel, metaclass=ModelMeta):
                         ),
                     )
             elif isinstance(field_info, ManyToManyField):
-                if model_field.shape not in (2, 3, 6, 7, 8, 9):
+                if model_field.shape != 2:
                     raise FieldTypeError(
-                        (
-                            'ManyToManyField must be a iterable "cherry.Model" type,'
-                            ' such as list[Model]'
-                        ),
+                        'ManyToManyField must be a list of "cherry.Model" type',
                     )
-                if not hasattr(field_info, "many_to_many_key"):
-                    if len(field_info.related_model.__meta__.primary_key) != 1:
+                if not hasattr(field_info, "m2m_field_name"):
+                    if len(cls.__meta__.primary_key) != 1:
                         raise PrimaryKeyMultipleError(
                             (
                                 f'{cls} has multiple primary keys, you must'
                                 ' explicitly give out foreign key through'
-                                ' Relationship(foreign_key="some field")'
+                                ' Relationship(many_to_many="some field")'
                             ),
                         )
-                    field_info.m2m_field = (
-                        field_info.related_model.__meta__.primary_key[0]
-                    )
-                if not hasattr(field_info, "related_model"):
+                    field_info.m2m_field_name = cls.__meta__.primary_key[0]
+                if not hasattr(field_info, "related_field_name"):
                     for rname, rfield in field_info.related_model.__fields__.items():
                         if (
                             isinstance(rfield.field_info, ManyToManyField)
                             and rfield.field_info.related_model is cls
                             and (
-                                rfield.field_info.related_field_name == model_field.name
-                                or rfield.field_info.related_field_name is None
+                                (
+                                    rfn := getattr(
+                                        rfield.field_info,
+                                        "related_field_name",
+                                        None,
+                                    )
+                                )
+                                is None
+                                or rfn == model_field.name
                             )
                         ):
                             field_info.related_field_name = rname
@@ -674,13 +980,9 @@ class Model(BaseModel, metaclass=ModelMeta):
                             rfield.field_info.related_field = field_info
                             break
                 cls.__meta__.many_to_many_fields[model_field.name] = field_info
+                setattr(cls, model_field.name, field_info.related_model)
         cls.__meta__.foreign_keys = tuple(
             f.foreign_key_self_name for f in cls.__meta__.related_fields.values()
-        )
-        cls.__meta__.primary_key = tuple(
-            field.name
-            for field in cls.__fields__.values()
-            if isinstance(field.field_info, BaseField) and field.field_info.primary_key
         )
         return cls.__meta__.columns
 
@@ -704,17 +1006,21 @@ class Model(BaseModel, metaclass=ModelMeta):
                 in field.related_model.__meta__.many_to_many_fields
                 and field_name not in cls.__meta__.many_to_many_tables
             ):
-                field.m2m_table_field = f"{cls.tablename}_{field.m2m_field}"
-                field.related_field.m2m_table_field = (
-                    f"{field.related_model.tablename}_{field.related_field.m2m_field}"
+                field.m2m_table_field_name = f"{cls.tablename}_{field.m2m_field_name}"
+                field.related_field.m2m_table_field_name = (
+                    f"{field.related_model.tablename}"
+                    f"_{field.related_field.m2m_field_name}"
                 )
+                tablenames = [cls.tablename, field.related_model.tablename]
+                tablenames.sort()
                 table = Table(
-                    f"{cls.tablename}_and_{field.related_model.tablename}",
+                    "_".join(tablenames),
                     metadata,
                     Column(
-                        field.m2m_table_field,
+                        field.m2m_table_field_name,
+                        cls.__meta__.columns[field.m2m_field_name].type,
                         ForeignKey(
-                            f"{cls.tablename}.{field.m2m_field}",
+                            f"{cls.tablename}.{field.m2m_field_name}",
                             onupdate=field.on_update
                             or (field.related_field and field.related_field.on_update)
                             or "NO ACTION",
@@ -724,9 +1030,12 @@ class Model(BaseModel, metaclass=ModelMeta):
                         ),
                     ),
                     Column(
-                        field.related_field.m2m_table_field,
+                        field.related_field.m2m_table_field_name,
+                        field.related_model.__meta__.columns[
+                            field.related_field.m2m_field_name
+                        ].type,
                         ForeignKey(
-                            f"{field.related_model.tablename}.{field.related_field.m2m_field}",
+                            f"{field.related_model.tablename}.{field.related_field.m2m_field_name}",
                             onupdate=field.on_update
                             or (field.related_field and field.related_field.on_update)
                             or "NO ACTION",

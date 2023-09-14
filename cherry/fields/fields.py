@@ -1,5 +1,7 @@
-from typing import Any, Dict, Literal, Optional, Type, TYPE_CHECKING, TypeVar, Union
-from typing_extensions import Annotated, Self
+from typing import Any, Dict, Literal, Optional, Type, TYPE_CHECKING, Union
+from typing_extensions import Self
+
+from cherry.typing import CASCADE_TYPE
 
 from pydantic.fields import FieldInfo, Undefined
 from pydantic.typing import NoArgAnyCallable
@@ -10,21 +12,24 @@ if TYPE_CHECKING:
 
     from pydantic.typing import AbstractSetIntStr, MappingIntStrAny
 
-T = TypeVar("T")
-
-PrimaryKey = Annotated[T, "primary_key"]
-
 
 class BaseField(FieldInfo):
-    nullable: bool = False
+    primary_key: bool = False
+    autoincrement: bool = False
+    index: bool = False
+    unique: bool = False
+    sa_column: Optional[Column]
+    sa_column_extra: Dict[str, Any] = {}
+    nullable: Optional[bool] = None
 
     def __init__(self, default: Any = ..., **kwargs: Any) -> None:
-        self.primary_key: bool = kwargs.pop("primary_key", False)
-        self.autoincrement: bool = kwargs.pop("autoincrement", False)
-        self.index: bool = kwargs.pop("index", False)
-        self.column_type: Optional[Column] = kwargs.pop("column_type", None)
-        self.unique: bool = kwargs.pop("unique", False)
-        self.sa_column_args: Dict[str, Any] = kwargs.pop("sa_column_args", {}) or {}
+        self.primary_key = kwargs.pop("primary_key", False)
+        self.autoincrement = kwargs.pop("autoincrement", False)
+        self.index = kwargs.pop("index", False)
+        self.unique = kwargs.pop("unique", False)
+        self.nullable = kwargs.pop("nullable", None)
+        self.sa_column = kwargs.pop("sa_column", None)
+        self.sa_column_extra = kwargs.pop("sa_column_extra", {}) or {}
         super().__init__(default, **kwargs)
 
     @classmethod
@@ -60,22 +65,31 @@ class BaseField(FieldInfo):
         )
 
 
-class ForeignKeyField(FieldInfo):
+class RelationshipField(FieldInfo):
     related_model: Type["Model"]
-    foreign_key: str
-    foreign_key_self_name: str
-    related_field_name: Optional[str]
-    related_field: Optional["ReverseRelationshipField"]
+    related_field_name: str
+    related_field: Optional["RelationshipField"]
     on_update: Optional[str]
     on_delete: Optional[str]
-    nullable: bool = False
+    nullable: Optional[bool] = None
+
+
+class ForeignKeyField(RelationshipField):
+    related_field: Optional["ReverseRelationshipField"]
+    related_field_name: Optional[str]
+    foreign_key: str
+    foreign_key_self_name: str
+    sa_column_extra: Dict[str, Any]
+    foreign_key_extra: Dict[str, Any]
 
     def __init__(
         self,
         related_field: Optional[str],
         foreign_key: Union[Literal[True], str],
+        foreign_key_extra: Optional[Dict[str, Any]],
         on_update: Optional[str],
         on_delete: Optional[str],
+        sa_column_extra: Optional[Dict[str, Any]],
         **kwargs: Any,
     ) -> None:
         self.related_field = None  #  generate when generate model column
@@ -84,17 +98,15 @@ class ForeignKeyField(FieldInfo):
             self.foreign_key = foreign_key
         self.on_update = on_update
         self.on_delete = on_delete
+        self.nullable = kwargs.pop("nullable", None)
+        self.sa_column_extra = sa_column_extra or {}
+        self.foreign_key_extra = foreign_key_extra or {}
         super().__init__(**kwargs)
 
 
-class ReverseRelationshipField(FieldInfo):
-    related_model: Type["Model"]
-    related_field_name: str
+class ReverseRelationshipField(RelationshipField):
     related_field: ForeignKeyField
-    is_list: bool
-    on_update: Optional[str]
-    on_delete: Optional[str]
-    nullable: bool = False
+    is_list: bool = False
 
     def __init__(
         self,
@@ -107,6 +119,7 @@ class ReverseRelationshipField(FieldInfo):
             self.related_field_name = related_field
         self.on_update = on_update
         self.on_delete = on_delete
+        self.nullable = kwargs.pop("nullable", None)
         super().__init__(**kwargs)
 
     def __repr_args__(self):
@@ -114,16 +127,12 @@ class ReverseRelationshipField(FieldInfo):
         return [(a, v) for a, v in attrs if v]
 
 
-class ManyToManyField(FieldInfo):
-    related_model: Type["Model"]
-    m2m_field: str
-    m2m_table_field: str
-    related_field_name: str
+class ManyToManyField(RelationshipField):
+    m2m_field_name: str
+    m2m_table_field_name: str
     related_field: "ManyToManyField"
-    on_update: Optional[str]
-    on_delete: Optional[str]
-    nullable: bool = False
     table: Table
+    sa_column_extra: Dict[str, Any]
 
     def __init__(
         self,
@@ -131,14 +140,17 @@ class ManyToManyField(FieldInfo):
         many_to_many: Union[Literal[True], str],
         on_update: Optional[str],
         on_delete: Optional[str],
+        sa_column_extra: Optional[Dict[str, Any]],
         **kwargs: Any,
     ) -> None:
         if related_field is not None:
             self.related_field_name = related_field
         if isinstance(many_to_many, str):
-            self.m2m_field = many_to_many
+            self.m2m_field_name = many_to_many
         self.on_update = on_update
         self.on_delete = on_delete
+        self.sa_column_extra = sa_column_extra or {}
+        self.nullable = kwargs.pop("nullable", None)
         super().__init__(**kwargs)
 
 
@@ -149,8 +161,9 @@ def Field(
     autoincrement: bool = False,
     index: bool = False,
     unique: bool = False,
+    nullable: Optional[bool] = None,
     sa_column: Optional[Column] = None,
-    sa_column_args: Optional[Dict[str, Any]] = None,
+    sa_column_extra: Optional[Dict[str, Any]] = None,
     default_factory: Optional[NoArgAnyCallable] = None,
     alias: Optional[str] = None,
     title: Optional[str] = None,
@@ -177,6 +190,8 @@ def Field(
     repr: bool = True,
     **extra: Any,
 ) -> Any:
+    if primary_key:
+        nullable = False
     field_info = BaseField(
         default=default,
         default_factory=default_factory,
@@ -184,8 +199,9 @@ def Field(
         autoincrement=autoincrement,
         index=index,
         unique=unique,
+        nullable=nullable,
         sa_column=sa_column,
-        sa_column_args=sa_column_args,
+        sa_column_extra=sa_column_extra,
         alias=alias,
         title=title,
         description=description,
@@ -219,27 +235,13 @@ def Relationship(
     related_field: Optional[str] = None,
     *,
     foreign_key: Union[Literal[True], str, None] = None,
+    foreign_key_extra: Optional[Dict[str, Any]] = None,
     reverse_related: Optional[Literal[True]] = None,
     many_to_many: Union[Literal[True], str, None] = None,
-    on_update: Optional[
-        Literal[
-            "RESTRICT",
-            "CASCADE",
-            "SET NULL",
-            "NO ACTION",
-            "SET DEFAULT",
-        ]
-    ] = None,
-    on_delete: Optional[
-        Literal[
-            "RESTRICT",
-            "CASCADE",
-            "SET NULL",
-            "NO ACTION",
-            "SET DEFAULT",
-        ]
-    ] = None,
-    sa_column_args: Optional[Dict[str, Any]] = None,
+    on_update: Optional[CASCADE_TYPE] = None,
+    on_delete: Optional[CASCADE_TYPE] = None,
+    nullable: Optional[bool] = None,
+    sa_column_extra: Optional[Dict[str, Any]] = None,
     default: Any = Undefined,
     default_factory: Optional[NoArgAnyCallable] = None,
     alias: Optional[str] = None,
@@ -258,12 +260,14 @@ def Relationship(
     if foreign_key is not None:
         field_info = ForeignKeyField(
             foreign_key=foreign_key,
+            foreign_key_extra=foreign_key_extra,
             related_field=related_field,
             on_update=on_update,
             on_delete=on_delete,
             default=default,
             default_factory=default_factory,
-            sa_column_args=sa_column_args,
+            nullable=nullable,
+            sa_column_extra=sa_column_extra,
             alias=alias,
             title=title,
             description=description,
@@ -281,7 +285,8 @@ def Relationship(
             on_delete=on_delete,
             default=default,
             default_factory=default_factory,
-            sa_column_args=sa_column_args,
+            nullable=nullable,
+            sa_column_extra=sa_column_extra,
             alias=alias,
             title=title,
             description=description,
@@ -296,6 +301,7 @@ def Relationship(
             related_field=related_field,
             on_update=on_update,
             on_delete=on_delete,
+            nullable=nullable,
             default=default,
             default_factory=default_factory,
             alias=alias,

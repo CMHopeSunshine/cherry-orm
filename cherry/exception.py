@@ -10,6 +10,10 @@ class ModelMissingError(ValueError, CherryException):
     """Model is missing."""
 
 
+class ModelTypeError(TypeError, CherryException):
+    """Model is not correct."""
+
+
 class FieldTypeError(TypeError, CherryException):
     """Field type is not correct."""
 
@@ -48,3 +52,7 @@ class NoMatchDataError(ValueError, CherryException):
 
 class PaginateArgError(ValueError, CherryException):
     """The paginate args is not correct."""
+
+
+class ClauseTypeError(TypeError, CherryException):
+    """The clause type is not correct."""

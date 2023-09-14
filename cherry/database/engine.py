@@ -1,7 +1,9 @@
-from typing import Dict, Type, TYPE_CHECKING, Union
+import asyncio
+from typing import Any, Dict, List, Optional, Type, TYPE_CHECKING, Union
 
 from sqlalchemy import Engine, event, make_url, MetaData, URL
 from sqlalchemy.ext.asyncio import (
+    AsyncConnection,
     AsyncEngine,
     create_async_engine,
 )
@@ -9,12 +11,18 @@ from sqlalchemy.ext.asyncio import (
 if TYPE_CHECKING:
     from cherry.models import Model
 
+DictStrAny = Dict[str, Any]
+Values = Union[DictStrAny, List[DictStrAny]]
+
 
 class Database:
     _engine: AsyncEngine
     _metadata: MetaData
     _models: Dict[str, Type["Model"]] = {}
     _url: URL
+    _connect: Optional[AsyncConnection] = None
+    _lock: asyncio.Lock = asyncio.Lock()
+    _counter: int = 0
 
     def __init__(self, url: Union[str, URL], echo: bool = False) -> None:
         if isinstance(url, str):
@@ -57,6 +65,26 @@ class Database:
             result = await conn.execute(*arg, **kwargs)
             await conn.commit()
         return result
+
+    async def __aenter__(self) -> AsyncConnection:
+        if self._connect is None:
+            self._connect = self._engine.connect()
+        async with self._lock:
+            self._counter += 1
+            if self._counter == 1:
+                await self._connect.start()
+            return self._connect
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        async with self._lock:
+            self._counter -= 1
+            if self._counter == 0 and self._connect is not None:
+                if exc_type is not None:
+                    await self._connect.rollback()
+                else:
+                    await self._connect.commit()
+                await self._connect.close()
+                self._connect = None
 
     def _set_sqlite(self):
         def set_sqlite_pragma(dbapi_connection, connection_record):
