@@ -117,12 +117,12 @@ class ModelMeta(ModelMetaclass):
         ...
 
     @overload
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other: object) -> bool:
         ...
 
     def __eq__(
         self,
-        other: Any,
+        other: object,
     ) -> Union[bool, ColumnElement]:
         if isinstance(other, Model):
             field = self._get_field_type_by_model(other)  # type: ignore

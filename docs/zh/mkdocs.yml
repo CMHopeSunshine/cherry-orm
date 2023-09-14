@@ -56,7 +56,7 @@ markdown_extensions:
       pygments_lang_class: true
   - pymdownx.inlinehilite
   - pymdownx.snippets:
-      base_path: ../src
+      base_path: ./docs/src
   - pymdownx.superfences
   - pymdownx.details
   - pymdownx.tabbed:
