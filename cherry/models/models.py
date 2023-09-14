@@ -58,6 +58,8 @@ class ModelMeta(ModelMetaclass):
                 meta = mix_meta_config(base.__meta__, MetaConfig)
         init_meta_config(meta)
         meta.tablename = name
+        if meta.abstract:
+            meta.abstract = False
 
         allowed_meta_kwargs = {
             key
