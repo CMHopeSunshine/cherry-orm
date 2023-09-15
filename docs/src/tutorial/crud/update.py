@@ -26,7 +26,7 @@ async def main():
 
     await user.update(age=21, birthday=date(2023, 6, 1))
 
-    user = await User.update_or_create(
+    user, is_update = await User.update_or_create(
         User.name == "Paimon",
         defaults={"age": 18, "birthday": date(2020, 6, 1)},
     )

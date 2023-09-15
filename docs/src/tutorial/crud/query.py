@@ -21,35 +21,35 @@ async def main():
     users = [User(id=i, name=f"user {i}", age=i * 5) for i in range(1, 11)]
     await User.insert_many(*users)
 
-    # Pythonic 风格
+    # Pythonic style
     user: User = await User.get(User.id == 1)
-    # Django 风格
+    # Django style
     user: User = await User.get(id=1)
 
-    # Pythonic 风格
+    # Pythonic style
     user_or_none: Optional[User] = await User.get_or_none(User.name == "user 2")
-    # Django 风格
+    # Django style
     user_or_none: Optional[User] = await User.get_or_none(name="user 2")
 
-    # Pythonic 风格
-    user: User = await User.get_or_create(
+    # Pythonic style
+    user, is_get = await User.get_or_create(
         User.name == "user 3",
         defaults={"id": 3, "age": 15},
     )
-    # Django 风格
-    user: User = await User.get_or_create(
+    # Django style
+    user, is_get = await User.get_or_create(
         name="user 3",
         defaults={"id": 3, "age": 15},
     )
 
-    # Pythonic 风格
+    # Pythonic style
     user1: Optional[User] = await User.filter(User.age <= 15).first()
     users: List[User] = await User.filter(User.age > 10).all()
     user2: User = await User.filter(User.name == "user 1").get()
     user3: Optional[User] = await User.filter(User.age >= 5).random_one()
     usersp: List[User] = await User.filter(User.age <= 5).paginate(page=1, page_size=3)
 
-    # Django 风格
+    # Django style
     user1: Optional[User] = await User.filter(age__le=15).first()
     users: List[User] = await User.filter(age__gt=10).all()
     user2: User = await User.filter(name="user 1").get()

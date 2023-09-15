@@ -1,6 +1,7 @@
 from typing import (
     Any,
     Dict,
+    List,
     Literal,
     Mapping,
     Tuple,
@@ -14,6 +15,7 @@ from typing_extensions import TypeAlias, TypeVarTuple
 from sqlalchemy import BinaryExpression, BooleanClauseList
 
 if TYPE_CHECKING:
+    from cherry.fields.clause import ModelClause
     from cherry.models import Model
 
 CASCADE_TYPE: TypeAlias = Literal[
@@ -38,4 +40,5 @@ ModelType = Type["Model"]
 DictStrAny: TypeAlias = Dict[str, Any]
 TupleAny: TypeAlias = Tuple[Any, ...]
 AnyMapping: TypeAlias = Mapping[Any, Any]
-OptionalFilterType: TypeAlias = Union[BooleanClauseList, BinaryExpression, None]
+ClauseListType: TypeAlias = List[Union[BinaryExpression[bool], "ModelClause"]]
+OptionalClause: TypeAlias = Union[BooleanClauseList, BinaryExpression, None]

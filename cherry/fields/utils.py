@@ -1,17 +1,10 @@
 from functools import reduce
-from typing import (
-    Any,
-    Callable,
-    cast,
-    Generic,
-    Optional,
-    Type,
-)
+from typing import Any, Callable, Generic, Optional, Type
 
-from cherry.typing import DictStrAny, ModelType, OptionalFilterType, T, TupleAny
+from cherry.typing import ClauseListType, DictStrAny, ModelType, T, TupleAny
 
 import pydantic
-from sqlalchemy import BinaryExpression, BooleanClauseList, Column
+from sqlalchemy import Column
 from sqlalchemy.sql import operators as sa_op
 
 operator_mapping = {
@@ -51,12 +44,12 @@ operator_mapping = {
 }
 
 
-def generate_clause_from_arg_and_kwargs(
+def args_and_kwargs_to_clause_list(
     model: ModelType,
     args: TupleAny,
     kwargs: DictStrAny,
-) -> OptionalFilterType:
-    filters = cast(BooleanClauseList, reduce(sa_op.and_, args)) if args else None
+) -> ClauseListType:
+    column_elements = []
     for name, value in kwargs.items():
         attrs = name.split("__")
         if attrs[-1] in operator_mapping:
@@ -69,11 +62,9 @@ def generate_clause_from_arg_and_kwargs(
             attrs,
             model,
         )
-        if filters is None:
-            filters = cast(BinaryExpression[bool], operator(attr, value))
-        else:
-            filters &= operator(attr, value)
-    return filters
+        column_elements.append(operator(attr, value))
+    column_elements.extend(args)
+    return column_elements
 
 
 def validate_fields(

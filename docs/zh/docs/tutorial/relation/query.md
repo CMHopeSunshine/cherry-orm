@@ -10,7 +10,7 @@
 --8<-- "./tutorial/relation/block2.py:59:67"
 ```
 
-`prefetch_related` 接受若干个位置参数，用于指定要同时获取的字段。
+`prefetch_related` 接受若干个位置参数，用于指定要同时获取的字段，如果不传入参数，则是模型上的所有关系字段。
 
 ### `select_related`
 

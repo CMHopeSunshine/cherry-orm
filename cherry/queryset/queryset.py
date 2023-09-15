@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
+from functools import reduce
 from typing import (
     Any,
+    cast,
     Dict,
     Generic,
     List,
@@ -14,13 +16,14 @@ from typing import (
 from typing_extensions import Self, Unpack
 
 from cherry.exception import MultipleDataError, NoMatchDataError, PaginateArgError
+from cherry.fields.clause import ModelClause
 from cherry.fields.fields import (
     ForeignKeyField,
     ManyToManyField,
     ReverseRelationshipField,
 )
-from cherry.fields.utils import generate_clause_from_arg_and_kwargs, validate_fields
-from cherry.typing import DictStrAny, OptionalFilterType, T, T_MODEL, Ts
+from cherry.fields.utils import args_and_kwargs_to_clause_list, validate_fields
+from cherry.typing import ClauseListType, DictStrAny, OptionalClause, T, T_MODEL, Ts
 
 from .protocol import QuerySetProtocol
 
@@ -34,11 +37,12 @@ from sqlalchemy import (
     select,
 )
 from sqlalchemy.ext.asyncio import AsyncConnection
+from sqlalchemy.sql.operators import and_
 
 
 @dataclass
 class QueryOptions:
-    filter: OptionalFilterType = None
+    clause: OptionalClause = None
     order_by: List[Any] = field(default_factory=list)
     limit: Optional[int] = None
     offset: Optional[int] = None
@@ -52,28 +56,28 @@ class QueryOptions:
     def get_join(self, select_stat: Select) -> List[Any]:
         tables = select_stat.columns_clause_froms
         join_ = []
-        if isinstance(self.filter, BooleanClauseList):
-            for f in self.filter:
+        if isinstance(self.clause, BooleanClauseList):
+            for f in self.clause:
                 if isinstance(f.left, Column) and f.left.table not in tables:
                     join_.append(f.left.table)
                 if isinstance(f.right, Column) and f.right.table not in tables:
                     join_.append(f.right.table)
-        elif isinstance(self.filter, BinaryExpression):
+        elif isinstance(self.clause, BinaryExpression):
             if (
-                isinstance(self.filter.left, Column)
-                and self.filter.left.table not in tables
+                isinstance(self.clause.left, Column)
+                and self.clause.left.table not in tables
             ):
-                join_.append(self.filter.left.table)
+                join_.append(self.clause.left.table)
             if (
-                isinstance(self.filter.right, Column)
-                and self.filter.right.table not in tables
+                isinstance(self.clause.right, Column)
+                and self.clause.right.table not in tables
             ):
-                join_.append(self.filter.right.table)
+                join_.append(self.clause.right.table)
         return [j for j in join_ if j is not None]
 
     def as_select_option(self, select_stat: Select):
-        if self.filter is not None:
-            select_stat = select_stat.where(self.filter)
+        if self.clause is not None:
+            select_stat = select_stat.where(self.clause)
         if self.order_by:
             select_stat = select_stat.order_by(*self.order_by)
         if self.limit:
@@ -84,16 +88,6 @@ class QueryOptions:
             select_stat = select_stat.join(*join_)
         return select_stat
 
-    def filter_to_dict(self) -> DictStrAny:
-        if isinstance(self.filter, BooleanClauseList):
-            return {clause.left.name: clause.right.value for clause in self.filter}
-        elif isinstance(self.filter, BinaryExpression):
-            return {
-                self.filter.left.name: self.filter.right.value,
-            }
-        else:
-            return {}
-
 
 class QuerySet(QuerySetProtocol, Generic[T_MODEL]):
     def __init__(
@@ -103,16 +97,18 @@ class QuerySet(QuerySetProtocol, Generic[T_MODEL]):
         **kwargs: Any,
     ) -> None:
         self.model_cls = model_cls
+        self.raw_claust_list: ClauseListType = []
+        final_clause = self._parse_clause(*args, **kwargs)
         self.options = QueryOptions(
-            filter=generate_clause_from_arg_and_kwargs(self.model_cls, args, kwargs),
+            clause=cast(OptionalClause, final_clause),
         )
 
     def filter(self, *args: Any, **kwargs: Any) -> Self:
-        filters = generate_clause_from_arg_and_kwargs(self.model_cls, args, kwargs)
-        if self.options.filter is None:
-            self.options.filter = filters
-        elif filters is not None:
-            self.options.filter &= filters
+        clause = self._parse_clause(*args, **kwargs)
+        if self.options.clause is None:
+            self.options.clause = clause
+        elif clause is not None:
+            self.options.clause &= clause
         return self
 
     def order_by(self, *args: Any) -> Self:
@@ -266,8 +262,8 @@ class QuerySet(QuerySetProtocol, Generic[T_MODEL]):
     async def delete(self) -> int:
         async with self.model_cls.database as conn:
             stat = self.model_cls.table.delete()
-            if self.options.filter is not None:
-                stat = stat.where(self.options.filter)
+            if self.options.clause is not None:
+                stat = stat.where(self.options.clause)
             result = await conn.execute(stat)
             return result.rowcount
 
@@ -282,16 +278,16 @@ class QuerySet(QuerySetProtocol, Generic[T_MODEL]):
     async def count(self) -> int:
         async with self.model_cls.database as conn:
             stat = select(func.count()).select_from(self.model_cls.table)
-            if self.options.filter is not None:
-                stat = stat.where(self.options.filter)
+            if self.options.clause is not None:
+                stat = stat.where(self.options.clause)
             result = await conn.execute(stat)
             return result.scalar()  # type: ignore
 
     async def exists(self) -> bool:
         async with self.model_cls.database as conn:
             stat = exists().select_from(self.model_cls.table)
-            if self.options.filter is not None:
-                stat = stat.where(self.options.filter)
+            if self.options.clause is not None:
+                stat = stat.where(self.options.clause)
             result = await conn.execute(
                 select(stat),
             )
@@ -443,6 +439,38 @@ class QuerySet(QuerySetProtocol, Generic[T_MODEL]):
                     if related_data[rfield.m2m_table_field_name]
                     == data[rfield.m2m_field_name]
                 ]
+
+    def _parse_clause(self, *args: Any, **kwargs: Any):
+        clause_list = args_and_kwargs_to_clause_list(self.model_cls, args, kwargs)
+        if clause_list:
+            self.raw_claust_list.extend(clause_list)
+            final_clause = reduce(
+                and_,
+                (
+                    (
+                        clause.binary_expression
+                        if isinstance(clause, ModelClause)
+                        else clause
+                    )
+                    for clause in clause_list
+                ),
+            )
+        else:
+            final_clause = None
+        return cast(OptionalClause, final_clause)
+
+    def _clause_list_to_dict(self) -> DictStrAny:
+        data = {}
+        for clause in self.raw_claust_list:
+            if isinstance(clause, ModelClause):
+                data[clause.field_name] = clause.model
+            elif isinstance(clause, BooleanClauseList):
+                data.update(
+                    {c.left.name: c.right.value for c in clause},
+                )
+            elif isinstance(clause, BinaryExpression):
+                data[clause.left.name] = clause.right.value
+        return data
 
 
 class ValuesQuerySet(QuerySetProtocol, Generic[T, Unpack[Ts]]):

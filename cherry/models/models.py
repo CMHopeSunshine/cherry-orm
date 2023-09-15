@@ -7,16 +7,15 @@ from typing import (
     ForwardRef,
     List,
     Optional,
-    overload,
     Tuple,
     Type,
     TYPE_CHECKING,
-    Union,
 )
 from typing_extensions import dataclass_transform, Self
 
 from cherry.database import Database
 from cherry.exception import *
+from cherry.fields.clause import RelatedModelProxy
 from cherry.fields.fields import (
     BaseField,
     Field,
@@ -27,7 +26,10 @@ from cherry.fields.fields import (
     ReverseRelationshipField,
 )
 from cherry.fields.types import get_sqlalchemy_type_from_field
-from cherry.fields.utils import classproperty
+from cherry.fields.utils import (
+    args_and_kwargs_to_clause_list,
+    classproperty,
+)
 from cherry.meta.meta import init_meta_config, MetaConfig, mix_meta_config
 from cherry.meta.pydantic_config import generate_pydantic_config
 from cherry.queryset.queryset import QuerySet
@@ -113,38 +115,6 @@ class ModelMeta(ModelMetaclass):
                 )
 
         return new_cls
-
-    @overload
-    def __eq__(self, other: "Model") -> ColumnElement:
-        ...
-
-    @overload
-    def __eq__(self, other: object) -> bool:
-        ...
-
-    def __eq__(
-        self,
-        other: object,
-    ) -> Union[bool, ColumnElement]:
-        if isinstance(other, Model):
-            field = self._get_field_type_by_model(other)  # type: ignore
-            if isinstance(field, ForeignKeyField):
-                return getattr(self, field.foreign_key_self_name) == getattr(
-                    other,
-                    field.foreign_key,
-                )
-            elif isinstance(field, ReverseRelationshipField) and not field.is_list:
-                # if other._check_pk_null():
-                #     raise PrimaryKeyMissingError(
-                #         "Primary key can not be null when filter",
-                #     )
-                return other.get_pk_filter()
-            else:
-                raise FieldTypeError(f"cannnot use equal operator on {type(field)}")
-        return super().__eq__(other)
-
-    def __hash__(self):
-        return super().__hash__()
 
 
 class Model(BaseModel, metaclass=ModelMeta):
@@ -584,20 +554,20 @@ class Model(BaseModel, metaclass=ModelMeta):
         *args: Any,
         defaults: Optional[DictStrAny] = None,
         **kwargs: Any,
-    ) -> Self:
+    ) -> Tuple[Self, bool]:
         """select one model with filter condition, if not exist, create one"""
         queryset = cls.filter(*args, **kwargs)
         try:
-            return await queryset.get()
+            return await queryset.get(), True
         except NoMatchDataError:
-            create_values = queryset.options.filter_to_dict()
+            create_values = queryset._clause_list_to_dict()
             create_values.update(
                 {
                     (k.name if isinstance(k, Column) else k): v
                     for k, v in (defaults or {}).items()
                 },
             )
-            return await cls(**create_values).insert()
+            return await cls(**create_values).insert(), False
 
     @classmethod
     async def update_or_create(
@@ -605,25 +575,26 @@ class Model(BaseModel, metaclass=ModelMeta):
         *args: Any,
         defaults: Optional[DictStrAny] = None,
         **kwargs: Any,
-    ) -> Self:
+    ) -> Tuple[Self, bool]:
         """update one model with filter condition,
         if not exist, create one with filter and defaults values"""
+        clause_list = args_and_kwargs_to_clause_list(cls, args, kwargs)
         queryset = cls.filter(*args, **kwargs)
         try:
             model = await queryset.get()
-            return await model.update(**(defaults or {}))
+            return await model.update(**(defaults or {})), True
         except NoMatchDataError:
-            create_values = queryset.options.filter_to_dict()
+            create_values = queryset._clause_list_to_dict()
             create_values.update(
                 {
                     (k.name if isinstance(k, Column) else k): v
                     for k, v in (defaults or {}).items()
                 },
             )
-            return await cls(**create_values).insert()
+            return await cls(**create_values).insert(), False
 
     async def add(self, model: "Model") -> Self:
-        field = self._get_field_type_by_model(model)
+        _, field = self._get_field_type_by_model(model)
         async with self.database as conn:
             if isinstance(field, ManyToManyField):
                 await conn.execute(
@@ -665,7 +636,7 @@ class Model(BaseModel, metaclass=ModelMeta):
         return self
 
     async def remove(self, model: "Model"):
-        field = self._get_field_type_by_model(model)
+        _, field = self._get_field_type_by_model(model)
         async with self.database as conn:
             if isinstance(field, ManyToManyField):
                 await conn.execute(
@@ -807,6 +778,8 @@ class Model(BaseModel, metaclass=ModelMeta):
                     table_names.append(arg)
                 elif isinstance(arg, Column):
                     table_names.append(arg.table.name)
+                elif isinstance(arg, RelatedModelProxy):
+                    table_names.append(arg.related_model.tablename)
                 elif issubclass(arg, Model):
                     table_names.append(arg.tablename)
                 else:
@@ -821,13 +794,32 @@ class Model(BaseModel, metaclass=ModelMeta):
         return table_names
 
     @classmethod
-    def _get_field_type_by_model(cls, model: "Model") -> RelationshipField:
-        for field in cls.__fields__.values():
-            if isinstance(model, field.type_) and isinstance(
+    def _get_field_type_by_model(cls, model: "Model") -> Tuple[str, RelationshipField]:
+        for field_name, field in cls.__fields__.items():
+            if isinstance(
                 field.field_info,
                 RelationshipField,
-            ):
-                return field.field_info
+            ) and isinstance(model, field.field_info.related_model):
+                return field_name, field.field_info
+            # if (
+            #     isinstance(
+            #         field.field_info,
+            #         ForeignKeyField,
+            #     )
+            #     and field.field_info.related_field_name
+            #     and field.field_info.related_field
+            #     and isinstance(model, field.field_info.related_field.related_model)
+            # ) or (
+            #     isinstance(
+            #         field.field_info,
+            #         (ReverseRelationshipField, ManyToManyField),
+            #     )
+            #     and isinstance(model, field.field_info.related_field.related_model)
+            # ):
+            #     return (
+            #         field.field_info.related_field_name,  # type: ignore
+            #         field.field_info.related_field,
+            #     )
         raise FieldTypeError(
             f"There are no related fields associated with {cls}.{model}",
         )
@@ -902,7 +894,16 @@ class Model(BaseModel, metaclass=ModelMeta):
                     **field_info.sa_column_extra,
                 )
                 cls.__meta__.related_fields[model_field.name] = field_info
-                setattr(cls, model_field.name, field_info.related_model)
+                setattr(
+                    cls,
+                    model_field.name,
+                    RelatedModelProxy(
+                        cls,
+                        field_info.related_model,
+                        model_field.name,
+                        field_info,
+                    ),
+                )
                 setattr(
                     cls,
                     field_info.foreign_key_self_name,
@@ -936,7 +937,16 @@ class Model(BaseModel, metaclass=ModelMeta):
                             break
                 if hasattr(field_info, "related_field_name"):
                     cls.__meta__.reverse_related_fields[model_field.name] = field_info
-                    setattr(cls, model_field.name, field_info.related_model)
+                    setattr(
+                        cls,
+                        model_field.name,
+                        RelatedModelProxy(
+                            cls,
+                            field_info.related_model,
+                            model_field.name,
+                            field_info,
+                        ),
+                    )
                 else:
                     raise RelationSolveError(
                         (
@@ -982,7 +992,16 @@ class Model(BaseModel, metaclass=ModelMeta):
                             rfield.field_info.related_field = field_info
                             break
                 cls.__meta__.many_to_many_fields[model_field.name] = field_info
-                setattr(cls, model_field.name, field_info.related_model)
+                setattr(
+                    cls,
+                    model_field.name,
+                    RelatedModelProxy(
+                        cls,
+                        field_info.related_model,
+                        model_field.name,
+                        field_info,
+                    ),
+                )
         cls.__meta__.foreign_keys = tuple(
             f.foreign_key_self_name for f in cls.__meta__.related_fields.values()
         )

@@ -1,3 +1,4 @@
+from cherry.fields.clause import RelatedModelProxy
 from cherry.fields.fields import (
     BaseField,
     ForeignKeyField,
@@ -56,7 +57,10 @@ async def test_no_related():
 @pytest.mark.asyncio
 async def test_one_to_many():
     assert Student.__meta__.columns.keys() == {"id", "name", "school"}
-    assert Student.school is School
+    assert (
+        isinstance(Student.school, RelatedModelProxy)
+        and Student.school.related_model is School
+    )
     assert Student.School_id is Student.__meta__.columns["school"]  # type: ignore
     assert isinstance(
         Student.__meta__.columns["school"].type,
@@ -69,7 +73,10 @@ async def test_one_to_many():
     }
 
     assert School.__meta__.columns.keys() == {"id", "name"}
-    assert School.students is Student
+    assert (
+        isinstance(School.students, RelatedModelProxy)
+        and School.students.related_model is Student
+    )
     assert isinstance(
         School.__fields__["students"].field_info,
         ReverseRelationshipField,
@@ -82,7 +89,7 @@ async def test_one_to_many():
 @pytest.mark.asyncio
 async def test_many_to_many():
     assert Tag.__meta__.columns.keys() == {"name"}
-    assert Tag.posts is Post
+    assert isinstance(Tag.posts, RelatedModelProxy) and Tag.posts.related_model is Post
     assert isinstance(Tag.__fields__["posts"].field_info, ManyToManyField)
     assert Tag.__meta__.many_to_many_fields == {
         "posts": Tag.__fields__["posts"].field_info,
@@ -92,7 +99,7 @@ async def test_many_to_many():
     assert tag_field.m2m_table_field_name == "Tag_name"
 
     assert Post.__meta__.columns.keys() == {"id", "title"}
-    assert Post.tags is Tag
+    assert isinstance(Post.tags, RelatedModelProxy) and Post.tags.related_model is Tag
     assert isinstance(Post.__fields__["tags"].field_info, ManyToManyField)
     assert Post.__meta__.many_to_many_fields == {
         "tags": Post.__fields__["tags"].field_info,

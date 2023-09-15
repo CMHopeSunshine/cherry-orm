@@ -21,7 +21,9 @@
 
 ## `update_or_create`
 
-使用 `update_or_create`，如果数据库中存在该模型，则更新，否则插入：
+使用 `update_or_create`，如果数据库中存在该模型，则更新，否则插入。
+
+返回值类型为 `Tuple[Model, bool]`，第一个值为模型实例，第二个值是 `bool` 类型，`True` 表示更新了模型实例，`False` 表示创建了模型实例。
 
 ```python
 --8<-- "./tutorial/crud/update.py:29:32"
