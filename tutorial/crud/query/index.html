@@ -606,15 +606,15 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#order_by" class="md-nav__link">
-    order_by
+  <a href="#paginate" class="md-nav__link">
+    paginate
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#paginate" class="md-nav__link">
-    paginate
+  <a href="#order_by" class="md-nav__link">
+    order_by
   </a>
   
 </li>
@@ -883,15 +883,15 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#order_by" class="md-nav__link">
-    order_by
+  <a href="#paginate" class="md-nav__link">
+    paginate
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#paginate" class="md-nav__link">
-    paginate
+  <a href="#order_by" class="md-nav__link">
+    order_by
   </a>
   
 </li>
@@ -999,14 +999,15 @@
 </div>
 </div>
 <h2 id="get_or_create"><code>get_or_create</code></h2>
-<p>根据查询条件，获取指定模型数据，如不存在则使用查询条件和 <code>default</code> 中的值来创建它并返回。</p>
+<p>根据查询条件，获取指定模型数据，如不存在则使用查询条件和 <code>default</code> 中的值来创建它。</p>
+<p>返回值类型为 <code>Tuple[Model, bool]</code>，第一个值为模型实例，第二个值是 <code>bool</code> 类型，<code>True</code> 表示获取到了模型实例，<code>False</code> 表示创建了模型实例。</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="3:2"><input checked="checked" id="__tabbed_3_1" name="__tabbed_3" type="radio" /><input id="__tabbed_3_2" name="__tabbed_3" type="radio" /><div class="tabbed-labels"><label for="__tabbed_3_1">Pythonic style</label><label for="__tabbed_3_2">Djange style</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-4-1">1</a></span>
 <span class="normal"><a href="#__codelineno-4-2">2</a></span>
 <span class="normal"><a href="#__codelineno-4-3">3</a></span>
-<span class="normal"><a href="#__codelineno-4-4">4</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1"></a>    <span class="n">user</span><span class="p">:</span> <span class="n">User</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">get_or_create</span><span class="p">(</span>
+<span class="normal"><a href="#__codelineno-4-4">4</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1"></a>    <span class="n">user</span><span class="p">,</span> <span class="n">is_get</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">get_or_create</span><span class="p">(</span>
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2"></a>        <span class="n">User</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;user 3&quot;</span><span class="p">,</span>
 </span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3"></a>        <span class="n">defaults</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span> <span class="s2">&quot;age&quot;</span><span class="p">:</span> <span class="mi">15</span><span class="p">},</span>
 </span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4"></a>    <span class="p">)</span>
@@ -1016,7 +1017,7 @@
 <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-5-1">1</a></span>
 <span class="normal"><a href="#__codelineno-5-2">2</a></span>
 <span class="normal"><a href="#__codelineno-5-3">3</a></span>
-<span class="normal"><a href="#__codelineno-5-4">4</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1"></a>    <span class="n">user</span><span class="p">:</span> <span class="n">User</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">get_or_create</span><span class="p">(</span>
+<span class="normal"><a href="#__codelineno-5-4">4</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1"></a>    <span class="n">user</span><span class="p">,</span> <span class="n">is_get</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">get_or_create</span><span class="p">(</span>
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2"></a>        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;user 3&quot;</span><span class="p">,</span>
 </span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3"></a>        <span class="n">defaults</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span> <span class="s2">&quot;age&quot;</span><span class="p">:</span> <span class="mi">15</span><span class="p">},</span>
 </span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4"></a>    <span class="p">)</span>
@@ -1063,10 +1064,10 @@
 <p>返回查询结果的值，如果结果有多个，或者没有结果，均会抛出异常</p>
 <h3 id="random_one"><code>random_one</code></h3>
 <p>返回查询结果的随机一个值，如无则返回 <code>None</code></p>
-<h3 id="order_by"><code>order_by</code></h3>
-<p>根据给定的字段对查询结果进行排序</p>
 <h3 id="paginate"><code>paginate</code></h3>
 <p>根据给定的页数和每页数量，返回查询结果的分页值列表</p>
+<h3 id="order_by"><code>order_by</code></h3>
+<p>根据给定的字段对查询结果进行排序</p>
 <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-8-1">1</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1"></a>    <span class="n">user1</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">age</span> <span class="o">&lt;=</span> <span class="mi">15</span><span class="p">)</span><span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">age</span><span class="p">)</span><span class="o">.</span><span class="n">first</span><span class="p">()</span>
 </span></code></pre></div></td></tr></table></div>
 <h3 id="limit"><code>limit</code></h3>
@@ -1225,35 +1226,35 @@
 </span><span id="__span-14-21"><a id="__codelineno-14-21" name="__codelineno-14-21"></a>    <span class="n">users</span> <span class="o">=</span> <span class="p">[</span><span class="n">User</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="n">i</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;user </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">age</span><span class="o">=</span><span class="n">i</span> <span class="o">*</span> <span class="mi">5</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">11</span><span class="p">)]</span>
 </span><span id="__span-14-22"><a id="__codelineno-14-22" name="__codelineno-14-22"></a>    <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">insert_many</span><span class="p">(</span><span class="o">*</span><span class="n">users</span><span class="p">)</span>
 </span><span id="__span-14-23"><a id="__codelineno-14-23" name="__codelineno-14-23"></a>
-</span><span id="__span-14-24"><a id="__codelineno-14-24" name="__codelineno-14-24"></a>    <span class="c1"># Pythonic 风格</span>
+</span><span id="__span-14-24"><a id="__codelineno-14-24" name="__codelineno-14-24"></a>    <span class="c1"># Pythonic style</span>
 </span><span id="__span-14-25"><a id="__codelineno-14-25" name="__codelineno-14-25"></a>    <span class="n">user</span><span class="p">:</span> <span class="n">User</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">id</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
-</span><span id="__span-14-26"><a id="__codelineno-14-26" name="__codelineno-14-26"></a>    <span class="c1"># Django 风格</span>
+</span><span id="__span-14-26"><a id="__codelineno-14-26" name="__codelineno-14-26"></a>    <span class="c1"># Django style</span>
 </span><span id="__span-14-27"><a id="__codelineno-14-27" name="__codelineno-14-27"></a>    <span class="n">user</span><span class="p">:</span> <span class="n">User</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 </span><span id="__span-14-28"><a id="__codelineno-14-28" name="__codelineno-14-28"></a>
-</span><span id="__span-14-29"><a id="__codelineno-14-29" name="__codelineno-14-29"></a>    <span class="c1"># Pythonic 风格</span>
+</span><span id="__span-14-29"><a id="__codelineno-14-29" name="__codelineno-14-29"></a>    <span class="c1"># Pythonic style</span>
 </span><span id="__span-14-30"><a id="__codelineno-14-30" name="__codelineno-14-30"></a>    <span class="n">user_or_none</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">User</span><span class="p">]</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">get_or_none</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;user 2&quot;</span><span class="p">)</span>
-</span><span id="__span-14-31"><a id="__codelineno-14-31" name="__codelineno-14-31"></a>    <span class="c1"># Django 风格</span>
+</span><span id="__span-14-31"><a id="__codelineno-14-31" name="__codelineno-14-31"></a>    <span class="c1"># Django style</span>
 </span><span id="__span-14-32"><a id="__codelineno-14-32" name="__codelineno-14-32"></a>    <span class="n">user_or_none</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">User</span><span class="p">]</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">get_or_none</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;user 2&quot;</span><span class="p">)</span>
 </span><span id="__span-14-33"><a id="__codelineno-14-33" name="__codelineno-14-33"></a>
-</span><span id="__span-14-34"><a id="__codelineno-14-34" name="__codelineno-14-34"></a>    <span class="c1"># Pythonic 风格</span>
-</span><span id="__span-14-35"><a id="__codelineno-14-35" name="__codelineno-14-35"></a>    <span class="n">user</span><span class="p">:</span> <span class="n">User</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">get_or_create</span><span class="p">(</span>
+</span><span id="__span-14-34"><a id="__codelineno-14-34" name="__codelineno-14-34"></a>    <span class="c1"># Pythonic style</span>
+</span><span id="__span-14-35"><a id="__codelineno-14-35" name="__codelineno-14-35"></a>    <span class="n">user</span><span class="p">,</span> <span class="n">is_get</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">get_or_create</span><span class="p">(</span>
 </span><span id="__span-14-36"><a id="__codelineno-14-36" name="__codelineno-14-36"></a>        <span class="n">User</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;user 3&quot;</span><span class="p">,</span>
 </span><span id="__span-14-37"><a id="__codelineno-14-37" name="__codelineno-14-37"></a>        <span class="n">defaults</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span> <span class="s2">&quot;age&quot;</span><span class="p">:</span> <span class="mi">15</span><span class="p">},</span>
 </span><span id="__span-14-38"><a id="__codelineno-14-38" name="__codelineno-14-38"></a>    <span class="p">)</span>
-</span><span id="__span-14-39"><a id="__codelineno-14-39" name="__codelineno-14-39"></a>    <span class="c1"># Django 风格</span>
-</span><span id="__span-14-40"><a id="__codelineno-14-40" name="__codelineno-14-40"></a>    <span class="n">user</span><span class="p">:</span> <span class="n">User</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">get_or_create</span><span class="p">(</span>
+</span><span id="__span-14-39"><a id="__codelineno-14-39" name="__codelineno-14-39"></a>    <span class="c1"># Django style</span>
+</span><span id="__span-14-40"><a id="__codelineno-14-40" name="__codelineno-14-40"></a>    <span class="n">user</span><span class="p">,</span> <span class="n">is_get</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">get_or_create</span><span class="p">(</span>
 </span><span id="__span-14-41"><a id="__codelineno-14-41" name="__codelineno-14-41"></a>        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;user 3&quot;</span><span class="p">,</span>
 </span><span id="__span-14-42"><a id="__codelineno-14-42" name="__codelineno-14-42"></a>        <span class="n">defaults</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span> <span class="s2">&quot;age&quot;</span><span class="p">:</span> <span class="mi">15</span><span class="p">},</span>
 </span><span id="__span-14-43"><a id="__codelineno-14-43" name="__codelineno-14-43"></a>    <span class="p">)</span>
 </span><span id="__span-14-44"><a id="__codelineno-14-44" name="__codelineno-14-44"></a>
-</span><span id="__span-14-45"><a id="__codelineno-14-45" name="__codelineno-14-45"></a>    <span class="c1"># Pythonic 风格</span>
+</span><span id="__span-14-45"><a id="__codelineno-14-45" name="__codelineno-14-45"></a>    <span class="c1"># Pythonic style</span>
 </span><span id="__span-14-46"><a id="__codelineno-14-46" name="__codelineno-14-46"></a>    <span class="n">user1</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">User</span><span class="p">]</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">age</span> <span class="o">&lt;=</span> <span class="mi">15</span><span class="p">)</span><span class="o">.</span><span class="n">first</span><span class="p">()</span>
 </span><span id="__span-14-47"><a id="__codelineno-14-47" name="__codelineno-14-47"></a>    <span class="n">users</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">User</span><span class="p">]</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">age</span> <span class="o">&gt;</span> <span class="mi">10</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 </span><span id="__span-14-48"><a id="__codelineno-14-48" name="__codelineno-14-48"></a>    <span class="n">user2</span><span class="p">:</span> <span class="n">User</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;user 1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
 </span><span id="__span-14-49"><a id="__codelineno-14-49" name="__codelineno-14-49"></a>    <span class="n">user3</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">User</span><span class="p">]</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">age</span> <span class="o">&gt;=</span> <span class="mi">5</span><span class="p">)</span><span class="o">.</span><span class="n">random_one</span><span class="p">()</span>
 </span><span id="__span-14-50"><a id="__codelineno-14-50" name="__codelineno-14-50"></a>    <span class="n">usersp</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">User</span><span class="p">]</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">age</span> <span class="o">&lt;=</span> <span class="mi">5</span><span class="p">)</span><span class="o">.</span><span class="n">paginate</span><span class="p">(</span><span class="n">page</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">page_size</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
 </span><span id="__span-14-51"><a id="__codelineno-14-51" name="__codelineno-14-51"></a>
-</span><span id="__span-14-52"><a id="__codelineno-14-52" name="__codelineno-14-52"></a>    <span class="c1"># Django 风格</span>
+</span><span id="__span-14-52"><a id="__codelineno-14-52" name="__codelineno-14-52"></a>    <span class="c1"># Django style</span>
 </span><span id="__span-14-53"><a id="__codelineno-14-53" name="__codelineno-14-53"></a>    <span class="n">user1</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">User</span><span class="p">]</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">age__le</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span><span class="o">.</span><span class="n">first</span><span class="p">()</span>
 </span><span id="__span-14-54"><a id="__codelineno-14-54" name="__codelineno-14-54"></a>    <span class="n">users</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">User</span><span class="p">]</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">age__gt</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 </span><span id="__span-14-55"><a id="__codelineno-14-55" name="__codelineno-14-55"></a>    <span class="n">user2</span><span class="p">:</span> <span class="n">User</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;user 1&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>

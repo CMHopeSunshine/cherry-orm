@@ -928,7 +928,7 @@
 </span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8"></a><span class="hll">        <span class="k">await</span> <span class="n">School</span><span class="o">.</span><span class="n">select_related</span><span class="p">()</span><span class="o">.</span><span class="n">prefetch_related</span><span class="p">(</span><span class="n">School</span><span class="o">.</span><span class="n">students</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
 </span></span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9"></a>    <span class="p">)</span>
 </span></code></pre></div></td></tr></table></div>
-<p><code>prefetch_related</code> 接受若干个位置参数，用于指定要同时获取的字段。</p>
+<p><code>prefetch_related</code> 接受若干个位置参数，用于指定要同时获取的字段，如果不传入参数，则是模型上的所有关系字段。</p>
 <h3 id="select_related"><code>select_related</code></h3>
 <p><code>select_related</code> 是模型类上的没有查询条件的 <code>filter().prefetch_related</code> 的简写，它的参数与 <code>prefetch_related</code> 相同。</p>
 <h3 id="fetch_related"><code>fetch_related</code></h3>
