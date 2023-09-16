@@ -10,6 +10,7 @@ from typing import (
     Tuple,
     Type,
     TYPE_CHECKING,
+    Union,
 )
 from typing_extensions import dataclass_transform, Self
 
@@ -27,7 +28,6 @@ from cherry.fields.fields import (
 )
 from cherry.fields.types import get_sqlalchemy_type_from_field
 from cherry.fields.utils import (
-    args_and_kwargs_to_clause_list,
     classproperty,
 )
 from cherry.meta.meta import init_meta_config, MetaConfig, mix_meta_config
@@ -553,10 +553,15 @@ class Model(BaseModel, metaclass=ModelMeta):
         cls,
         *args: Any,
         defaults: Optional[DictStrAny] = None,
+        fetch_related: Union[bool, Tuple[Any, ...]] = False,
         **kwargs: Any,
     ) -> Tuple[Self, bool]:
         """select one model with filter condition, if not exist, create one"""
         queryset = cls.filter(*args, **kwargs)
+        if fetch_related is True or isinstance(fetch_related, tuple):
+            queryset = queryset.prefetch_related(
+                () if fetch_related is True else fetch_related,
+            )
         try:
             return await queryset.get(), True
         except NoMatchDataError:
@@ -574,12 +579,16 @@ class Model(BaseModel, metaclass=ModelMeta):
         cls,
         *args: Any,
         defaults: Optional[DictStrAny] = None,
+        fetch_related: Union[bool, Tuple[Any, ...]] = False,
         **kwargs: Any,
     ) -> Tuple[Self, bool]:
         """update one model with filter condition,
         if not exist, create one with filter and defaults values"""
-        clause_list = args_and_kwargs_to_clause_list(cls, args, kwargs)
         queryset = cls.filter(*args, **kwargs)
+        if fetch_related is True or isinstance(fetch_related, tuple):
+            queryset = queryset.prefetch_related(
+                () if fetch_related is True else fetch_related,
+            )
         try:
             model = await queryset.get()
             return await model.update(**(defaults or {})), True

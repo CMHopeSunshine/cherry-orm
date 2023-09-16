@@ -73,3 +73,8 @@ async def test_query_with_one_to_many():
     assert len(school1.students) == 0
     await school2.fetch_related(School.students)
     assert len(school2.students) == 1
+
+    schools = await School.select_related().all()
+    assert len(schools) == 2
+    assert len(schools[0].students) == 0
+    assert len(schools[1].students) == 1

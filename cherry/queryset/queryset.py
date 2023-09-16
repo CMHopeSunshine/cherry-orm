@@ -345,7 +345,7 @@ class QuerySet(QuerySetProtocol, Generic[T_MODEL]):
                 rfield.related_model.__meta__.table.select().where(
                     getattr(
                         rfield.related_model,
-                        rfield.related_field_name,
+                        rfield.related_field.foreign_key_self_name,
                     )
                     == now_data[target_field.foreign_key],
                 ),
@@ -405,7 +405,7 @@ class QuerySet(QuerySetProtocol, Generic[T_MODEL]):
                 rfield.related_model.__meta__.table.select().where(
                     getattr(
                         rfield.related_model,
-                        rfield.related_field_name,
+                        rfield.related_field.foreign_key_self_name,
                     ).in_(related_values),
                 ),
             )
