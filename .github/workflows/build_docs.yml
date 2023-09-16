@@ -7,6 +7,10 @@ on:
     paths:
       - "docs/**"
 
+  pull_request:
+    paths:
+      - "docs/**"
+
 jobs:
   build:
     runs-on: ubuntu-latest

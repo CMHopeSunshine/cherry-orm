@@ -4,7 +4,16 @@ on:
   push:
     branches:
       - master
+    paths:
+      - "cherry/**"
+      - "docs/src/**"
+      - "example/**"
+
   pull_request:
+    paths:
+      - "cherry/**"
+      - "docs/src/**"
+      - "example/**"
 
 jobs:
   ruff:
