@@ -31,6 +31,14 @@ class Database:
         self._metadata = MetaData()
         self._url = url
 
+    @property
+    def metadata(self):
+        return self._metadata
+
+    @property
+    def engine(self):
+        return self._engine
+
     async def create_all(self):
         async with self._engine.begin() as conn:
             await conn.run_sync(self._metadata.create_all)
@@ -40,14 +48,17 @@ class Database:
             await conn.run_sync(self._metadata.drop_all)
 
     async def init(self):
-        for model in self._models.values():
-            model._generate_sqlalchemy_column()
-            model._generate_sqlalchemy_table(self._metadata)
+        self.init_all_model()
 
         if self._url.drivername.startswith("sqlite"):
             self._set_sqlite()
 
         await self.create_all()
+
+    def init_all_model(self):
+        for model in self._models.values():
+            model._generate_sqlalchemy_column()
+            model._generate_sqlalchemy_table(self._metadata)
 
     async def dispose(self):
         await self._engine.dispose()
@@ -56,20 +67,10 @@ class Database:
         self._models[model.__meta__.tablename] = model
         model.__meta__.database = self
 
-    async def execute(
-        self,
-        *arg,
-        **kwargs,
-    ):
-        async with self._engine.connect() as conn:
-            result = await conn.execute(*arg, **kwargs)
-            await conn.commit()
-        return result
-
     async def __aenter__(self) -> AsyncConnection:
-        if self._connect is None:
-            self._connect = self._engine.connect()
         async with self._lock:
+            if self._connect is None:
+                self._connect = self._engine.connect()
             self._counter += 1
             if self._counter == 1:
                 await self._connect.start()
