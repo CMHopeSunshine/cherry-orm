@@ -68,10 +68,10 @@ def get_sqlalchemy_type_from_field(field: ModelField):
     if issubclass(field.type_, int):
         return sa_type.Integer
     elif issubclass(field.type_, str):
-        if hasattr(field.field_info, "max_length"):
-            return AutoString(length=field.field_info.max_length)
+        if getattr(field.field_info, "long_text", False):
+            return sa_type.Text
         else:
-            return AutoString
+            return AutoString(length=field.field_info.max_length)
     elif issubclass(field.type_, float):
         return sa_type.Float
     elif issubclass(field.type_, bool):

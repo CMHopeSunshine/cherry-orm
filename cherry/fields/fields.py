@@ -21,6 +21,7 @@ class BaseField(FieldInfo):
     sa_column: Optional[Column]
     sa_column_extra: Dict[str, Any] = {}
     nullable: Optional[bool] = None
+    long_text: bool = False
 
     def __init__(self, default: Any = ..., **kwargs: Any) -> None:
         self.primary_key = kwargs.pop("primary_key", False)
@@ -30,6 +31,7 @@ class BaseField(FieldInfo):
         self.nullable = kwargs.pop("nullable", None)
         self.sa_column = kwargs.pop("sa_column", None)
         self.sa_column_extra = kwargs.pop("sa_column_extra", {}) or {}
+        self.long_text = kwargs.pop("long_text", False)
         super().__init__(default, **kwargs)
 
     @classmethod
@@ -164,6 +166,7 @@ def Field(
     nullable: Optional[bool] = None,
     sa_column: Optional[Column] = None,
     sa_column_extra: Optional[Dict[str, Any]] = None,
+    long_text: bool = False,
     default_factory: Optional[NoArgAnyCallable] = None,
     alias: Optional[str] = None,
     title: Optional[str] = None,
@@ -202,6 +205,7 @@ def Field(
         nullable=nullable,
         sa_column=sa_column,
         sa_column_extra=sa_column_extra,
+        long_text=long_text,
         alias=alias,
         title=title,
         description=description,

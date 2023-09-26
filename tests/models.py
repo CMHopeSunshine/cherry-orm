@@ -6,7 +6,8 @@ from tests.database import database
 
 class User(cherry.Model):
     id: int | None = cherry.Field(default=None, primary_key=True, autoincrement=True)
-    name: str = cherry.Field(unique=True)
+    name: str = cherry.Field(unique=True, max_length=30)
+    introduce: str = cherry.Field(long_text=True)
     age: int = 18
     money: float = 200
 

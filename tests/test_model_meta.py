@@ -16,30 +16,35 @@ import sqlalchemy.types as sa_types
 
 @pytest.mark.asyncio
 async def test_no_related():
-    assert User.__fields__.keys() == {"id", "name", "age", "money"}
+    assert User.__fields__.keys() == {"id", "name", "introduce", "age", "money"}
     assert issubclass(User.__meta__, MetaConfig)
     assert User.__meta__.tablename == "User"
     assert User.__meta__.database == database
     assert User.__meta__.table is not None
     assert User.__meta__.metadata is not None
 
-    assert User.__meta__.columns.keys() == {"id", "name", "age", "money"}
+    assert User.__meta__.columns.keys() == {"id", "name", "introduce", "age", "money"}
     assert isinstance(User.__meta__.columns["id"].type, sa_types.Integer)
     assert User.__meta__.columns["id"].primary_key
     assert User.__meta__.columns["id"].autoincrement
-    assert isinstance(User.__meta__.columns["name"].type, AutoString)
+    assert (
+        isinstance(User.__meta__.columns["name"].type, AutoString)
+        and User.__meta__.columns["name"].type.length == 30
+    )
+    assert isinstance(User.__meta__.columns["introduce"].type, sa_types.Text)
     assert isinstance(User.__meta__.columns["age"].type, sa_types.Integer)
     assert isinstance(User.__meta__.columns["money"].type, sa_types.Float)
 
     assert User.__meta__.constraints == []
     assert not User.__meta__.abstract
 
-    assert User.__fields__.keys() == {"id", "name", "age", "money"}
+    assert User.__fields__.keys() == {"id", "name", "introduce", "age", "money"}
     assert isinstance(User.__fields__["id"].field_info, BaseField)
     assert User.__fields__["id"].field_info.primary_key
     assert User.__fields__["id"].field_info.autoincrement
     assert not User.__fields__["id"].field_info.nullable
     assert isinstance(User.__fields__["name"].field_info, BaseField)
+    assert isinstance(User.__fields__["introduce"].field_info, BaseField)
     assert isinstance(User.__fields__["age"].field_info, BaseField)
     assert isinstance(User.__fields__["money"].field_info, BaseField)
 
@@ -50,6 +55,7 @@ async def test_no_related():
 
     assert User.id is User.__meta__.columns["id"]
     assert User.name is User.__meta__.columns["name"]
+    assert User.introduce is User.__meta__.columns["introduce"]
     assert User.age is User.__meta__.columns["age"]
     assert User.money is User.__meta__.columns["money"]
 
