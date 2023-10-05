@@ -954,6 +954,8 @@
 <li>database - <code>cherry.Database</code> 对象，默认无。</li>
 <li>tablename - 模型在数据库中的表名。默认使用模型的类名作为表名，例如本处的 <code>User</code>。</li>
 <li>abstract - 是否为抽象模型。抽象模型即只用于继承，不作为数据库中的表，默认为 <code>False</code>。</li>
+<li>constraints - 更多 <code>sqlalchemy</code> 的表约束，类型为 <code>List[sqlalchemy.ColumnCollectionConstraint]</code>。</li>
+<li>indexes - 组合索引，类型为 <code>List[cherry.CompositeIndex]</code>。</li>
 </ul>
 <h2 id="_6">模型初始化</h2>
 <p>在绑定数据库对象后，你还需要在你的入口文件中调用 <code>Database.init</code> 方法，对模型以及数据库进行初始化才能使用。</p>
