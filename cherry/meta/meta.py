@@ -15,6 +15,8 @@ from cherry.fields.fields import (
     ReverseRelationshipField,
 )
 
+from .index import CompositeIndex
+
 from sqlalchemy import Column, MetaData, Table
 from sqlalchemy.sql.schema import ColumnCollectionConstraint
 
@@ -26,6 +28,7 @@ class MetaConfig:
     metadata: ClassVar[MetaData]
     columns: ClassVar[Dict[str, Column]]
     constraints: ClassVar[List[ColumnCollectionConstraint]]
+    indexes: ClassVar[List[CompositeIndex]]
     abstract: ClassVar[bool]
     primary_key: ClassVar[Tuple[str, ...]]
     related_fields: ClassVar[Dict[str, ForeignKeyField]]
@@ -61,3 +64,4 @@ def init_meta_config(
     meta_config.reverse_related_fields = {}
     meta_config.many_to_many_fields = {}
     meta_config.many_to_many_tables = {}
+    meta_config.indexes = []

@@ -38,7 +38,7 @@ from cherry.typing import AnyMapping, DictStrAny
 from pydantic import PrivateAttr
 from pydantic.fields import FieldInfo
 from pydantic.main import BaseModel, ModelMetaclass
-from sqlalchemy import Column, ForeignKey, MetaData, Table
+from sqlalchemy import Column, ForeignKey, Index, MetaData, Table
 from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.operators import and_
 
@@ -1099,4 +1099,20 @@ class Model(BaseModel, metaclass=ModelMeta):
                     field.related_field_name
                 ] = table
 
+        for index in cls.__meta__.indexes:
+            columns: List[Column] = [
+                (
+                    f.get_column()
+                    if isinstance((f := getattr(cls, column_name)), RelatedModelProxy)
+                    else f
+                )
+                for column_name in index.columns
+            ]
+            Index(
+                index.name,
+                *columns,
+                unique=index.unique,
+                quote=index.quote,
+                info=index.info,
+            )
         return cls.table

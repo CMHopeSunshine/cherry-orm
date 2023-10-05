@@ -12,7 +12,10 @@ from .fields import (
     ReverseRelation as ReverseRelation,
     Unique as Unique,
 )
-from .meta import MetaConfig as MetaConfig
+from .meta import (
+    CompositeIndex as CompositeIndex,
+    MetaConfig as MetaConfig,
+)
 from .models import Model as Model
 from .typing import (
     CASCADE as CASCADE,

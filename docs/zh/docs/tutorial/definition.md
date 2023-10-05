@@ -79,6 +79,8 @@
 - database - `cherry.Database` 对象，默认无。
 - tablename - 模型在数据库中的表名。默认使用模型的类名作为表名，例如本处的 `User`。
 - abstract - 是否为抽象模型。抽象模型即只用于继承，不作为数据库中的表，默认为 `False`。
+- constraints - 更多 `sqlalchemy` 的表约束，类型为 `List[sqlalchemy.ColumnCollectionConstraint]`。
+- indexes - 组合索引，类型为 `List[cherry.CompositeIndex]`。
 
 
 ## 模型初始化

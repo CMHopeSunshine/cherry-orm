@@ -1,11 +1,15 @@
-from typing import Type, TYPE_CHECKING
+from typing import Type, TYPE_CHECKING, Union
 
 from cherry.exception import FieldTypeError
 from cherry.typing import ModelType
 
-from .fields import ForeignKeyField, RelationshipField, ReverseRelationshipField
+from .fields import (
+    ForeignKeyField,
+    ManyToManyField,
+    ReverseRelationshipField,
+)
 
-from sqlalchemy import ColumnElement
+from sqlalchemy import Column, ColumnElement
 
 if TYPE_CHECKING:
     from cherry.models import Model
@@ -17,7 +21,7 @@ class ModelClause:
         model_cls: Type["Model"],
         model: "Model",
         field_name: str,
-        field: RelationshipField,
+        field: Union[ForeignKeyField, ReverseRelationshipField, ManyToManyField],
     ) -> None:
         if isinstance(field, ForeignKeyField) or (
             isinstance(field, ReverseRelationshipField) and not field.is_list
@@ -52,7 +56,7 @@ class RelatedModelProxy:
         self_model: ModelType,
         related_model: ModelType,
         field_name: str,
-        field: RelationshipField,
+        field: Union[ForeignKeyField, ReverseRelationshipField, ManyToManyField],
     ):
         self.model = self_model
         self.related_model = related_model
@@ -67,3 +71,13 @@ class RelatedModelProxy:
 
     def __eq__(self, other: "Model") -> ModelClause:
         return ModelClause(self.model, other, self.field_name, self.field)
+
+    def get_column(self) -> Column:
+        if not isinstance(self.field, ForeignKeyField):
+            raise FieldTypeError(
+                (
+                    "cannot use unique constraint on"
+                    f" {self.field_name}:{self.field.__class__.__name__}"
+                ),
+            )
+        return getattr(self.model, self.field.foreign_key_self_name)
