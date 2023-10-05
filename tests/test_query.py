@@ -7,7 +7,8 @@ import pytest
 @pytest.mark.asyncio
 async def test_query():
     users = [
-        User(id=i, name=f"user {i}", age=i * 5, money=i * 100.0) for i in range(1, 11)
+        User(id=i, name=f"user {i}", introduce="", age=i * 5, money=i * 100.0)
+        for i in range(1, 11)
     ]
     await User.insert_many(*users)
 
@@ -28,17 +29,20 @@ async def test_query():
 
     user, is_get = await User.get_or_create(
         name="user 12",
-        defaults={"id": 12, "age": 60},
+        defaults={"id": 12, "introduce": "", "age": 60},
     )
     assert user.id == 12 and user.age == 60, not is_get
 
-    user, is_create = await User.update_or_create(name="user 12", defaults={"age": 100})
+    user, is_create = await User.update_or_create(
+        name="user 12",
+        defaults={"introduce": "", "age": 100},
+    )
     assert user.id == 12 and user.age == 100, is_create
     await user.delete()
 
     user, is_create = await User.update_or_create(
         name="user 13",
-        defaults={"id": 13, "age": 100},
+        defaults={"id": 13, "introduce": "", "age": 100},
     )
     assert user.id == 13 and user.age == 100, is_create
     await user.delete()

@@ -6,17 +6,17 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_auto_int_pk():
-    user1 = User(name="John", age=30, money=100)
+    user1 = User(name="John", introduce="", age=30, money=100)
     assert user1.id is None
     await user1.insert()
     assert user1.id == 1
 
-    user2 = User(name="Jane", age=25, money=200)
+    user2 = User(name="Jane", introduce="", age=25, money=200)
     assert user2.id is None
     await user2.insert()
     assert user2.id == 2
 
-    user3 = User(id=3, name="Bob", age=20, money=300)
+    user3 = User(id=3, name="Bob", introduce="", age=20, money=300)
     assert user3.id == 3
     await user3.insert()
     assert user3.id == 3
@@ -71,7 +71,7 @@ async def test_many_to_many():
     post1 = await Post(title="post 1").insert()
     post2 = await Post(title="post 2").insert()
 
-    user = User(name="John", age=30, money=100)
+    user = User(name="John", introduce="", age=30, money=100)
 
     await post1.add(tag1)
     await post1.add(tag2)
