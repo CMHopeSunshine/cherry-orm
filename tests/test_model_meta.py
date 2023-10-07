@@ -1,10 +1,10 @@
-from cherry.fields.clause import RelatedModelProxy
 from cherry.fields.fields import (
     BaseField,
     ForeignKeyField,
     ManyToManyField,
     ReverseRelationshipField,
 )
+from cherry.fields.proxy import RelatedModelProxy
 from cherry.fields.types import AutoString
 from cherry.meta import MetaConfig
 from tests.database import database

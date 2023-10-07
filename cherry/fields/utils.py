@@ -1,5 +1,5 @@
 from functools import reduce
-from typing import Any, Callable, Generic, Optional, Type
+from typing import Any, Callable, Generic, List, Optional, Type
 
 from cherry.typing import ClauseListType, DictStrAny, ModelType, T, TupleAny
 
@@ -94,3 +94,10 @@ class classproperty(Generic[T]):
 
     def __get__(self, instance: Any, owner: Optional[Type[Any]] = None) -> T:
         return self.func(type(instance) if owner is None else owner)
+
+
+def create_nested_dict(path: List[str], value: Any):
+    if len(path) == 1:
+        return {path[0]: value}
+    else:
+        return {path[0]: create_nested_dict(path[1:], value)}

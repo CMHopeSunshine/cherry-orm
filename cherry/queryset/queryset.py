@@ -16,12 +16,12 @@ from typing import (
 from typing_extensions import Self, Unpack
 
 from cherry.exception import MultipleDataError, NoMatchDataError, PaginateArgError
-from cherry.fields.clause import ModelClause
 from cherry.fields.fields import (
     ForeignKeyField,
     ManyToManyField,
     ReverseRelationshipField,
 )
+from cherry.fields.proxy import JsonFieldClause, ModelClause
 from cherry.fields.utils import args_and_kwargs_to_clause_list, validate_fields
 from cherry.typing import ClauseListType, DictStrAny, OptionalClause, T, T_MODEL, Ts
 
@@ -449,7 +449,7 @@ class QuerySet(QuerySetProtocol, Generic[T_MODEL]):
                 (
                     (
                         clause.binary_expression
-                        if isinstance(clause, ModelClause)
+                        if isinstance(clause, (ModelClause, JsonFieldClause))
                         else clause
                     )
                     for clause in clause_list
@@ -464,6 +464,8 @@ class QuerySet(QuerySetProtocol, Generic[T_MODEL]):
         for clause in self.raw_claust_list:
             if isinstance(clause, ModelClause):
                 data[clause.field_name] = clause.model
+            elif isinstance(clause, JsonFieldClause):
+                data[clause.path[0]] = clause.get_value()
             elif isinstance(clause, BooleanClauseList):
                 data.update(
                     {c.left.name: c.right.value for c in clause},

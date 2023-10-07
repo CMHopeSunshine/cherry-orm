@@ -40,6 +40,7 @@ asyncio_mode = "strict"
 
 [tool.black]
 line-length = 88
+preview = true
 include = '\.pyi?$'
 extend-exclude = '''
 '''

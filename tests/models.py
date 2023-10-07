@@ -1,7 +1,9 @@
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import cherry
 from tests.database import database
+
+from pydantic import BaseModel
 
 
 class User(cherry.Model):
@@ -45,6 +47,21 @@ class Post(cherry.Model):
     id: cherry.AutoIntPK = None
     title: str
     tags: cherry.ManyToMany[List[Tag]] = []
+
+    class Meta:
+        database = database
+
+
+class Data(BaseModel):
+    a: str
+    b: str
+
+
+class JsonModel(cherry.Model):
+    id: cherry.AutoIntPK = None
+    data: Data
+    lst: List[int]
+    dic: Dict[str, Dict[str, str]]
 
     class Meta:
         database = database

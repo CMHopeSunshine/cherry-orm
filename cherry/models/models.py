@@ -16,7 +16,6 @@ from typing_extensions import dataclass_transform, Self
 
 from cherry.database import Database
 from cherry.exception import *
-from cherry.fields.clause import RelatedModelProxy
 from cherry.fields.fields import (
     BaseField,
     Field,
@@ -26,6 +25,7 @@ from cherry.fields.fields import (
     RelationshipField,
     ReverseRelationshipField,
 )
+from cherry.fields.proxy import JsonFieldProxy, RelatedModelProxy
 from cherry.fields.types import get_sqlalchemy_type_from_field
 from cherry.fields.utils import (
     classproperty,
@@ -719,6 +719,7 @@ class Model(BaseModel, metaclass=ModelMeta):
         if exclude_pk:
             exclude |= set(self.__meta__.primary_key)
         data = self.dict(by_alias=True, exclude=exclude)
+        data = {k: list(v) if isinstance(v, set) else v for k, v in data.items()}
         if exclude_related:
             return data
         for field_name, field in self.__meta__.related_fields.items():
@@ -821,9 +822,10 @@ class Model(BaseModel, metaclass=ModelMeta):
         for model_field in cls.__fields__.values():
             field_info = model_field.field_info
             if isinstance(field_info, BaseField):
+                type_, is_json = get_sqlalchemy_type_from_field(model_field)
                 cls.__meta__.columns[model_field.name] = Column(
                     model_field.name,
-                    type_=get_sqlalchemy_type_from_field(model_field),
+                    type_=type_,
                     primary_key=field_info.primary_key,
                     nullable=field_info.nullable,
                     index=field_info.index,
@@ -832,7 +834,18 @@ class Model(BaseModel, metaclass=ModelMeta):
                     default=field_info.default or field_info.default_factory or None,
                     **field_info.sa_column_extra,
                 )
-                setattr(cls, model_field.name, cls.__meta__.columns[model_field.name])
+                if is_json:
+                    setattr(
+                        cls,
+                        model_field.name,
+                        JsonFieldProxy(cls.__meta__.columns[model_field.name]),
+                    )
+                else:
+                    setattr(
+                        cls,
+                        model_field.name,
+                        cls.__meta__.columns[model_field.name],
+                    )
             elif isinstance(field_info, ForeignKeyField):
                 if not hasattr(field_info, "related_field_name"):
                     for rname, rfield in field_info.related_model.__fields__.items():

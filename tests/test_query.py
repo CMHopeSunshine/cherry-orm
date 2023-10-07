@@ -1,5 +1,5 @@
 import cherry.exception
-from tests.models import School, Student, User
+from tests.models import Data, JsonModel, School, Student, User
 
 import pytest
 
@@ -82,3 +82,27 @@ async def test_query_with_one_to_many():
     assert len(schools) == 2
     assert len(schools[0].students) == 0
     assert len(schools[1].students) == 1
+
+
+@pytest.mark.asyncio
+async def test_json_query():
+    await JsonModel(
+        data=Data(a="123", b="456"),
+        lst=[1, 2, 3],
+        dic={"a": {"bb": "ccc"}},
+    ).insert()
+
+    await JsonModel(
+        data=Data(a="789", b="111"),
+        lst=[3, 2, 1],
+        dic={"bb": {"qwe": "rty"}},
+    ).insert()
+
+    assert await JsonModel.filter(JsonModel.data.a == "123").count() == 1
+    assert await JsonModel.filter(JsonModel.lst[1] == 2).count() == 2
+    assert (
+        await JsonModel.filter(
+            (JsonModel.dic["a"]["bb"] == "ccc") | (JsonModel.dic["bb"]["qwe"] == "rty"),
+        ).count()
+        == 2
+    )

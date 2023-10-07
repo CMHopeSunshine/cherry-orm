@@ -15,7 +15,7 @@ from typing_extensions import TypeAlias, TypeVarTuple
 from sqlalchemy import BinaryExpression, BooleanClauseList
 
 if TYPE_CHECKING:
-    from cherry.fields.clause import ModelClause
+    from cherry.fields.proxy import ModelClause
     from cherry.models import Model
 
 CASCADE_TYPE: TypeAlias = Literal[
