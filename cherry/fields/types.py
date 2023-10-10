@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any, cast, Iterable, Mapping
 from uuid import UUID
 
+from cherry.exception import FieldTypeError
+
 from pydantic.fields import ModelField
 from pydantic.main import BaseModel
 from pydantic.typing import all_literal_values, get_args, get_origin, is_literal_type
@@ -81,15 +83,24 @@ def get_sqlalchemy_type_from_python_type(type_: type):
             precision=getattr(type_, "max_digits", None),
             scale=getattr(type_, "decimal_places", None),
         )
-    elif is_literal_type(type_):
-        values = all_literal_values(type_)
-        if all(issubclass(type(v), type(values[0])) for v in values[1:]):
-            return get_sqlalchemy_type_from_python_type(type(values[0]))
     else:
         return None
 
 
 def get_sqlalchemy_type_from_field(field: ModelField):
+    if is_literal_type(field.type_):
+        values = all_literal_values(field.type_)
+        if all(issubclass(type(v), type(values[0])) for v in values[1:]):
+            if (
+                type_ := get_sqlalchemy_type_from_python_type(type(values[0]))
+            ) is not None:
+                return type_, False
+            raise FieldTypeError(
+                f"{field.type_} has no matching SQLAlchemy type",
+            )
+        raise FieldTypeError(
+            f"{field.type_} All values in a literal type must be of the same type",
+        )
     if (origin_type := get_origin(field.annotation)) is not None:
         if issubclass(origin_type, Iterable):
             args = get_args(field.annotation)
@@ -122,6 +133,6 @@ def get_sqlalchemy_type_from_field(field: ModelField):
         return type_, False
     if inspect.isclass(field.type_) and issubclass(field.type_, BaseModel):
         return types.JSON, True
-    raise TypeError(
+    raise FieldTypeError(
         f"{field.type_} has no matching SQLAlchemy type",
     )
