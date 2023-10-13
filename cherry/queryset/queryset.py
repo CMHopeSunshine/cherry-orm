@@ -463,7 +463,7 @@ class QuerySet(QuerySetProtocol, Generic[T_MODEL]):
         data = {}
         for clause in self.raw_claust_list:
             if isinstance(clause, ModelClause):
-                data[clause.field_name] = clause.model
+                data[clause.field_name] = clause.value
             elif isinstance(clause, JsonFieldClause):
                 data[clause.path[0]] = clause.get_value()
             elif isinstance(clause, BooleanClauseList):

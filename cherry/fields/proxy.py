@@ -54,7 +54,7 @@ class ModelClause(ModelClauseBase):
     def __init__(
         self,
         model_cls: Type["Model"],
-        model: "Model",
+        value: Any,
         field_name: str,
         field: Union[ForeignKeyField, ReverseRelationshipField, ManyToManyField],
         op: OperatorFunc = operator.eq,
@@ -63,7 +63,7 @@ class ModelClause(ModelClauseBase):
             isinstance(field, ReverseRelationshipField) and not field.is_list
         ):
             self.model_cls = model_cls
-            self.model = model
+            self.value = value
             self.field = field
             self.field_name = field_name
             self.op = op
@@ -78,16 +78,29 @@ class ModelClause(ModelClauseBase):
                     self.model_cls,
                     self.field.foreign_key_self_name,
                 ),
-                getattr(
-                    self.model,
-                    self.field.foreign_key,
+                (
+                    getattr(
+                        self.value,
+                        self.field.foreign_key,
+                    )
+                    if isinstance(self.value, self.field.related_model)
+                    else self.value
                 ),
             )
         else:
-            return self.model.get_pk_filter()
+            if isinstance(self.value, self.field.related_model):
+                return self.value.get_pk_filter()
+            else:
+                return self.op(
+                    getattr(
+                        self.field.related_model,
+                        self.field.related_field_name,
+                    ),
+                    self.value,
+                )
 
     def __repr__(self) -> str:
-        return f"{self.model_cls.__name__}.{self.field_name} {self.op.__name__} {self.model}"  # noqa: E501
+        return f"{self.model_cls.__name__}.{self.field_name} {self.op.__name__} {self.value}"  # noqa: E501
 
 
 class RelatedModelProxy:
