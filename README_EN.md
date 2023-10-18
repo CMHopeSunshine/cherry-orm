@@ -1,6 +1,6 @@
 <p align="center">
     <h1 align="center">Cherry ORM</h1>
-    <p align="center">Python 异步 ORM</p>
+    <p align="center">Python Asynchronous ORM</p>
 </p>
 <p align="center">
     <a href="./LICENSE">
@@ -15,28 +15,29 @@
 </p>
 
 <p align="center">
-    <strong>简体中文</strong>
+    <a href="https://github.com/CMHopeSunshine/cherry-orm">简体中文</a>
     ·
-    <a href="https://github.com/CMHopeSunshine/cherry-orm/blob/master/README_EN.md">English</a>
+    <strong>English</strong>
 </p>
 
-## 简介
+## Overview
 
-`Cherry ORM` 是一个 Python 的异步对象关系映射（ORM）库，它基于 [SQLAlchemy Core](https://www.sqlalchemy.org/) 和 [Pydantic V1](https://docs.pydantic.dev/1.10/) 构建。
+`Cherry ORM` is an asynchronous object relational mapping (ORM) library for Python. It is based on [SQLAlchemy Core](https://www.sqlalchemy.org/) and [Pydantic V1](https://docs.pydantic.dev/1.10/).
 
-它的一切设计都是为了简单易用，极大地减少开发者的数据库操作成本，提高开发效率，让开发者更专注于业务逻辑的实现。
+All of its design is designed to be simple and easy to use, greatly reducing the cost of database operation for developers, improving development efficiency, and allowing developers to focus more on the implementation of business logic.
 
-## 安装
 
-- 使用 pip: `pip install cherry-orm`
-- 使用 Poetry: `poetry add cherry-orm`
-- 使用 PDM: `pdm add cherry-orm`
+## Install
 
-## 文档
+- use pip: `pip install cherry-orm`
+- use Poetry: `poetry add cherry-orm`
+- use PDM: `pdm add cherry-orm`
 
--> [文档地址](https://cherry.cherishmoon.fun)
+## Document
 
-## 示例
+-> [Document](https://cherry.cherishmoon.fun/en/)
+
+## Example
 
 ```python
 from datetime import date
@@ -72,44 +73,44 @@ class School(cherry.Model):
 async def main():
     await db.init()
 
-    # 插入
+    # insert
     school = await School(id=1, name="school 1").insert()
     student1 = await Student(id=1, name="student 1", age=15, school=school).insert()
     await Student(id=2, name="student 2", age=18, school=school).insert()
     await Student(id=3, name="student 3", age=20, school=school).insert()
 
-    # 更新
+    # update
     student1.age += 1
     await student1.save()
     # or
     await student1.update(age=19)
 
-    # 获取关联的模型
+    # get related model
     await school.fetch_related(School.students)
     assert len(school.students) == 3
 
-    # 条件查询
-    # Pythonic 风格
+    # conditional  query
+    # Pythonic style
     student2: Student = await Student.filter(Student.name == "student 2").get()
-    # Django 风格
+    # Django style
     student2: Student = await Student.filter(name="student 2").get()
 
     students: List[Student] = await Student.filter(Student.age >= 18).all()
 
-    # 聚合查询
+    # aggregate query
     student_nums: int = await Student.filter(Student.age >= 18).count()
     assert len(students) == student_nums
     student_age_avg: Optional[int] = await Student.select().avg(Student.age)
 
-    # 查询时预取关联模型
+    # prefetch related model in query
     student_with_school: Student = (
         await Student.filter(Student.name == "student 3")
         .prefetch_related(Student.school)
         .get()
     )
 
-    # 选择更新
+    # select for update
     await Student.select().update(birthday=date(2023, 10, 1))
-    # 选择删除
+    # select for delete
     await Student.filter(Student.age >= 20).delete()
 ```
