@@ -45,14 +45,14 @@ class Array(types.TypeDecorator):
 
 
 def get_sqlalchemy_type_from_python_type(type_: type):
+    if issubclass(type_, bool):
+        return types.Boolean
     if issubclass(type_, int):
         return types.Integer
     elif issubclass(type_, float):
         return types.Float
     elif issubclass(type_, str):
         return AutoString
-    elif issubclass(type_, bool):
-        return types.Boolean
     elif issubclass(type_, datetime.datetime):
         return types.DateTime
     elif issubclass(type_, datetime.date):
