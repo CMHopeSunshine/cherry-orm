@@ -122,10 +122,7 @@ class Model(BaseModel, metaclass=ModelMeta):
         __meta__: ClassVar[Type[MetaConfig]]
 
     if TYPE_CHECKING:
-        __cherry_foreign_key_values__: DictStrAny = Field(
-            default_factory=dict,
-            init=False,
-        )
+        __cherry_foreign_key_values__: DictStrAny
     else:
         __cherry_foreign_key_values__: DictStrAny = PrivateAttr(default_factory=dict)
 
