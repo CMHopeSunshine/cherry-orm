@@ -47,6 +47,8 @@ class Array(types.TypeDecorator):
 def get_sqlalchemy_type_from_python_type(type_: type):
     if issubclass(type_, bool):
         return types.Boolean
+    elif issubclass(type_, Enum):
+        return types.Enum(type_)
     if issubclass(type_, int):
         return types.Integer
     elif issubclass(type_, float):
@@ -67,17 +69,13 @@ def get_sqlalchemy_type_from_python_type(type_: type):
         type_,
         (
             Path,
-            ipaddress.IPv4Address,
-            ipaddress.IPv4Network,
-            ipaddress.IPv6Address,
-            ipaddress.IPv6Network,
+            ipaddress._BaseAddress,
+            ipaddress._BaseNetwork,
         ),
     ):
         return AutoString
     elif issubclass(type_, UUID):
         return types.Uuid
-    elif issubclass(type_, Enum):
-        return types.Enum(type_)
     elif issubclass(type_, Decimal):
         return types.Numeric(
             precision=getattr(type_, "max_digits", None),
