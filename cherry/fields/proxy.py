@@ -21,8 +21,8 @@ from .fields import (
     ManyToManyField,
     ReverseRelationshipField,
 )
-from .utils import create_nested_dict
 
+from khemia.utils import create_nested_dict
 from pydantic import BaseModel
 from sqlalchemy import BinaryExpression, Column, ColumnElement, JSON
 

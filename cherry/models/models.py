@@ -27,14 +27,12 @@ from cherry.fields.fields import (
 )
 from cherry.fields.proxy import JsonFieldProxy, RelatedModelProxy
 from cherry.fields.types import get_sqlalchemy_type_from_field
-from cherry.fields.utils import (
-    classproperty,
-)
 from cherry.meta.meta import init_meta_config, MetaConfig, mix_meta_config
 from cherry.meta.pydantic_config import generate_pydantic_config
 from cherry.queryset.queryset import QuerySet
 from cherry.typing import AnyMapping, DictStrAny
 
+from khemia.utils import classproperty
 from pydantic import PrivateAttr
 from pydantic.fields import FieldInfo
 from pydantic.main import BaseModel, ModelMetaclass
@@ -46,7 +44,7 @@ from sqlalchemy.sql.operators import and_
 @dataclass_transform(kw_only_default=True, field_specifiers=(Field, Relationship))
 class ModelMeta(ModelMetaclass):
     def __new__(
-        cls: type["ModelMeta"],
+        cls,
         name: str,
         bases: Tuple[Type[Any], ...],
         attrs: DictStrAny,
@@ -84,8 +82,7 @@ class ModelMeta(ModelMetaclass):
                 )
             field_info = model_field.field_info
             if isinstance(field_info, BaseField):
-                if field_info.nullable is None:
-                    field_info.nullable = model_field.allow_none
+                pass
             elif isinstance(
                 field_info,
                 RelationshipField,
@@ -97,7 +94,7 @@ class ModelMeta(ModelMetaclass):
                 raise FieldTypeError(
                     (
                         'Field type must be "cherry.Field", got unexpected type: '
-                        f' {field_info.__class__}'
+                        f" {field_info.__class__}"
                     ),
                 )
 
@@ -122,7 +119,7 @@ class Model(BaseModel, metaclass=ModelMeta):
         __meta__: ClassVar[Type[MetaConfig]]
 
     if TYPE_CHECKING:
-        __cherry_foreign_key_values__: DictStrAny
+        __cherry_foreign_key_values__: DictStrAny = Field(init=False)
     else:
         __cherry_foreign_key_values__: DictStrAny = PrivateAttr(default_factory=dict)
 
@@ -734,9 +731,9 @@ class Model(BaseModel, metaclass=ModelMeta):
             if not field.nullable and not data[field.foreign_key_self_name]:
                 raise ForeignKeyMissingError(
                     (
-                        'Foreign key field'
+                        "Foreign key field"
                         f' "{self.__class__}.{field.foreign_key_self_name}" cannot be'
-                        ' None when insert or update'
+                        " None when insert or update"
                     ),
                 )
         return data
@@ -762,7 +759,7 @@ class Model(BaseModel, metaclass=ModelMeta):
                     raise RelationSolveError(
                         (
                             'Related model must be a "cherry.Model", but got unexpected'
-                            f' type {field_info.related_model}'
+                            f" type {field_info.related_model}"
                         ),
                     )
                 if field_info.related_model in model_type:
@@ -819,7 +816,12 @@ class Model(BaseModel, metaclass=ModelMeta):
         for model_field in cls.__fields__.values():
             field_info = model_field.field_info
             if isinstance(field_info, BaseField):
-                type_, is_json = get_sqlalchemy_type_from_field(model_field)
+                nullable, type_, is_json = get_sqlalchemy_type_from_field(
+                    model_field,
+                    cls.__meta__,
+                )
+                if field_info.nullable is None:
+                    field_info.nullable = nullable
                 cls.__meta__.columns[model_field.name] = Column(
                     model_field.name,
                     type_=type_,
@@ -878,15 +880,17 @@ class Model(BaseModel, metaclass=ModelMeta):
                     if len(field_info.related_model.__meta__.primary_key) != 1:
                         raise PrimaryKeyMultipleError(
                             (
-                                f'{cls} has multiple primary keys, you must'
-                                ' explicitly give out foreign key through'
+                                f"{cls} has multiple primary keys, you must"
+                                " explicitly give out foreign key through"
                                 ' Relationship(foreign_key="some field")'
                             ),
                         )
                     field_info.foreign_key = (
                         field_info.related_model.__meta__.primary_key[0]
                     )
-                field_info.foreign_key_self_name = f"{field_info.related_model.tablename}_{field_info.foreign_key}"  # noqa: E501
+                field_info.foreign_key_self_name = (
+                    f"{field_info.related_model.tablename}_{field_info.foreign_key}"  # noqa: E501
+                )
                 cls.__meta__.columns[model_field.name] = Column(
                     f"{field_info.related_model.tablename}_{field_info.foreign_key}",
                     ForeignKey(
@@ -932,7 +936,7 @@ class Model(BaseModel, metaclass=ModelMeta):
                     raise FieldTypeError(
                         (
                             'ReverseRelationshipField must be a "cherry.Model" type or'
-                            ' alist of it'
+                            " alist of it"
                         ),
                     )
                 if not hasattr(field_info, "related_field_name"):
@@ -985,8 +989,8 @@ class Model(BaseModel, metaclass=ModelMeta):
                     if len(cls.__meta__.primary_key) != 1:
                         raise PrimaryKeyMultipleError(
                             (
-                                f'{cls} has multiple primary keys, you must'
-                                ' explicitly give out foreign key through'
+                                f"{cls} has multiple primary keys, you must"
+                                " explicitly give out foreign key through"
                                 ' Relationship(many_to_many="some field")'
                             ),
                         )

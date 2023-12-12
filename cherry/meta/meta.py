@@ -36,6 +36,8 @@ class MetaConfig:
     foreign_keys: ClassVar[Tuple[str, ...]]
     many_to_many_fields: ClassVar[Dict[str, ManyToManyField]]
     many_to_many_tables: ClassVar[Dict[str, Table]]
+    use_jsonb_in_postgres: ClassVar[bool]
+    use_array_in_postgres: ClassVar[bool]
 
 
 def mix_meta_config(
@@ -65,3 +67,5 @@ def init_meta_config(
     meta_config.many_to_many_fields = {}
     meta_config.many_to_many_tables = {}
     meta_config.indexes = []
+    meta_config.use_jsonb_in_postgres = True
+    meta_config.use_array_in_postgres = True

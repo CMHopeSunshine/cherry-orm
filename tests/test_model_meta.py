@@ -52,6 +52,8 @@ async def test_no_related():
     assert User.__meta__.related_fields == {}
     assert User.__meta__.reverse_related_fields == {}
     assert User.__meta__.foreign_keys == ()
+    assert User.__meta__.use_array_in_postgres
+    assert User.__meta__.use_jsonb_in_postgres
 
     assert User.id is User.__meta__.columns["id"]
     assert User.name is User.__meta__.columns["name"]

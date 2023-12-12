@@ -81,6 +81,8 @@
 - abstract - 是否为抽象模型。抽象模型即只用于继承，不作为数据库中的表，默认为 `False`。
 - constraints - 更多 `sqlalchemy` 的表约束，类型为 `List[sqlalchemy.ColumnCollectionConstraint]`。
 - indexes - 组合索引，类型为 `List[cherry.CompositeIndex]`。
+- use_jsonb_in_postgres - 在 postgresql 数据库中 Mapping 等类型使用 jsonb，默认为 `True`。
+- use_array_in_postgres - 在 postgresql 数据库中 Iterable 等类型使用 array，默认为 `True`。
 
 
 ## 模型初始化

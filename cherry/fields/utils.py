@@ -1,7 +1,6 @@
 from functools import reduce
-from typing import Any, Callable, Generic, List, Optional, Type
 
-from cherry.typing import ClauseListType, DictStrAny, ModelType, T, TupleAny
+from cherry.typing import ClauseListType, DictStrAny, ModelType, TupleAny
 
 import pydantic
 from sqlalchemy import Column
@@ -86,18 +85,3 @@ def validate_fields(
         raise validation_error
 
     return values
-
-
-class classproperty(Generic[T]):
-    def __init__(self, func: Callable[[Any], T]) -> None:
-        self.func = func
-
-    def __get__(self, instance: Any, owner: Optional[Type[Any]] = None) -> T:
-        return self.func(type(instance) if owner is None else owner)
-
-
-def create_nested_dict(path: List[str], value: Any):
-    if len(path) == 1:
-        return {path[0]: value}
-    else:
-        return {path[0]: create_nested_dict(path[1:], value)}

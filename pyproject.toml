@@ -5,13 +5,14 @@ description = "Python asynchronous ORM based on SQLAlchemy and Pydantic."
 authors = ["CMHopeSunshine <277073121@qq.com>"]
 license = "MIT"
 readme = "README.md"
-keywords = ["orm", "sqlalchemy", "pydantic", "asyncio"]
+keywords = ["database", "orm", "sqlalchemy", "pydantic", "asyncio"]
 packages = [{ include = "cherry" }]
 
 [tool.poetry.dependencies]
 python = "^3.8"
 pydantic = "^1.10.10"
 SQLAlchemy = "^2.0.22"
+khemia = "^0.1.0"
 aiosqlite = { version = "^0.19.0", optional = true }
 asyncmy = { version = "^0.2.8", optional = true }
 asyncpg = { version = "^0.28.0", optional = true }

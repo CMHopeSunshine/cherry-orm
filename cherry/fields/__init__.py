@@ -18,6 +18,5 @@ from .fields import (
     ReverseRelationshipField as ReverseRelationshipField,
 )
 from .types import (
-    Array as Array,
     AutoString as AutoString,
 )

@@ -1,8 +1,7 @@
 import inspect
 from typing import Any
 
-from cherry.fields.utils import classproperty
-
+from khemia.utils import classproperty
 from pydantic import BaseConfig
 
 
