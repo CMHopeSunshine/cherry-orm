@@ -5,10 +5,7 @@ from typing import (
     cast,
     ClassVar,
     ForwardRef,
-    List,
     Optional,
-    Tuple,
-    Type,
     TYPE_CHECKING,
     Union,
 )
@@ -27,15 +24,22 @@ from cherry.fields.fields import (
 )
 from cherry.fields.proxy import JsonFieldProxy, RelatedModelProxy
 from cherry.fields.types import get_sqlalchemy_type_from_field
-from cherry.meta.meta import init_meta_config, MetaConfig, mix_meta_config
-from cherry.meta.pydantic_config import generate_pydantic_config
+from cherry.meta.config import (
+    CherryConfig,
+    CherryDatabaseConfig,
+    default_pydantic_config,
+    generate_cherry_config,
+)
+from cherry.meta.meta import MetaConfig
 from cherry.queryset.queryset import QuerySet
 from cherry.typing import AnyMapping, DictStrAny
 
 from khemia.utils import classproperty
 from pydantic import PrivateAttr
+from pydantic._internal._generics import PydanticGenericMetadata
+from pydantic._internal._model_construction import ModelMetaclass
 from pydantic.fields import FieldInfo
-from pydantic.main import BaseModel, ModelMetaclass
+from pydantic.main import BaseModel
 from sqlalchemy import Column, ForeignKey, Index, MetaData, Table
 from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.operators import and_
@@ -44,43 +48,53 @@ from sqlalchemy.sql.operators import and_
 @dataclass_transform(kw_only_default=True, field_specifiers=(Field, Relationship))
 class ModelMeta(ModelMetaclass):
     def __new__(
-        cls,
-        name: str,
-        bases: Tuple[Type[Any], ...],
-        attrs: DictStrAny,
+        mcs,
+        cls_name: str,
+        bases: tuple[type[Any], ...],
+        namespace: DictStrAny,
+        __pydantic_generic_metadata__: Union[PydanticGenericMetadata, None] = None,
+        __pydantic_reset_parent_namespace__: bool = True,
+        _create_model_module: Union[str, None] = None,
         **kwargs: Any,
     ) -> "ModelMeta":
-        generate_pydantic_config(attrs)
+        # if bases:
+        generate_cherry_config(bases, namespace, kwargs)
+        cherry_config: CherryConfig = namespace["cherry_config"]
+        if cherry_config.get("abstract"):
+            cherry_config["abstract"] = False
+            # cherry_database_config = CherryDatabaseConfig(**cherry_config)
 
-        meta = type("Meta", (MetaConfig,), {})
-        for base in reversed(bases):
-            if base != BaseModel and issubclass(base, Model):
-                meta = mix_meta_config(base.__meta__, MetaConfig)
-        init_meta_config(meta)
-        meta.tablename = name
-        if meta.abstract:
-            meta.abstract = False
+        # meta = type("Meta", (MetaConfig,), {})
+        # for base in reversed(bases):
+        #     if base != BaseModel and issubclass(base, Model):
+        #         meta = mix_meta_config(base.__meta__, MetaConfig)
+        # init_meta_config(meta)
+        # meta.tablename = cls_name
+        # if meta.abstract:
+        #     meta.abstract = False
 
-        allowed_meta_kwargs = {
-            key
-            for key in dir(meta)
-            if not (key.startswith("__") and key.endswith("__"))
-        }
-        meta_kwargs = {
-            key: kwargs.pop(key) for key in kwargs.keys() & allowed_meta_kwargs
-        }
-        attrs["__meta__"] = mix_meta_config(attrs.get("Meta"), meta, **meta_kwargs)
-
-        new_cls = cast(Type["Model"], super().__new__(cls, name, bases, attrs))
+        cls: type["Model"] = super().__new__(
+            mcs,
+            cls_name,
+            bases,
+            namespace,
+            __pydantic_generic_metadata__,
+            __pydantic_reset_parent_namespace__,
+            _create_model_module,
+            **kwargs,
+        )
 
         meta_config = new_cls.__meta__
 
-        for model_field in new_cls.__fields__.values():
-            if model_field.field_info.__class__ is FieldInfo:
-                model_field.field_info = BaseField.from_base_field_info(
-                    model_field.field_info,
+        for field_name in new_cls.model_fields:
+            field_info = new_cls.model_fields[field_name]
+
+            if field_info.__class__ is FieldInfo:
+                field_info = new_cls.model_fields[
+                    field_name
+                ] = BaseField.from_base_field_info(
+                    field_info,
                 )
-            field_info = model_field.field_info
             if isinstance(field_info, BaseField):
                 pass
             elif isinstance(
@@ -88,8 +102,10 @@ class ModelMeta(ModelMetaclass):
                 RelationshipField,
             ):
                 if field_info.nullable is None:
-                    field_info.nullable = model_field.allow_none
-                field_info.related_model = model_field.type_  # type: ignore
+                    field_info.nullable = field_info.nullable
+                if field_info.annotation is None:
+                    raise FieldTypeError("field annotation can not be None")
+                field_info.related_model = field_info.annotation  # TODO: 存疑
             else:
                 raise FieldTypeError(
                     (
@@ -101,10 +117,9 @@ class ModelMeta(ModelMetaclass):
         if not meta_config.abstract and hasattr(meta_config, "database"):
             meta_config.database.add_model(new_cls)
             meta_config.primary_key = tuple(
-                field.name
-                for field in new_cls.__fields__.values()
-                if isinstance(field.field_info, BaseField)
-                and field.field_info.primary_key
+                field_name
+                for field_name, field in new_cls.model_fields.items()
+                if isinstance(field, BaseField) and field.primary_key
             )
             if len(meta_config.primary_key) == 0:
                 raise PrimaryKeyMissingError(
@@ -115,8 +130,11 @@ class ModelMeta(ModelMetaclass):
 
 
 class Model(BaseModel, metaclass=ModelMeta):
+    model_config = default_pydantic_config.copy()
+    cherry_config: ClassVar[CherryConfig]
+    cherry_database_config: ClassVar[CherryDatabaseConfig]
     if TYPE_CHECKING:
-        __meta__: ClassVar[Type[MetaConfig]]
+        __meta__: ClassVar[type[MetaConfig]]
 
     if TYPE_CHECKING:
         __cherry_foreign_key_values__: DictStrAny = Field(init=False)
@@ -161,7 +179,7 @@ class Model(BaseModel, metaclass=ModelMeta):
             if not exclude_related:
                 for name, rfield in self.__meta__.reverse_related_fields.items():
                     if related_values := getattr(self, name, None):
-                        related_values = cast(List[Model], related_values)
+                        related_values = cast(list[Model], related_values)
                         await asyncio.gather(
                             *[
                                 value.update(**{rfield.related_field_name: self})
@@ -510,7 +528,7 @@ class Model(BaseModel, metaclass=ModelMeta):
         return QuerySet(cls).prefetch_related(*args)
 
     @classmethod
-    async def paginate(cls, page: int, page_size: int) -> List[Self]:
+    async def paginate(cls, page: int, page_size: int) -> list[Self]:
         """select with pagination"""
         return await QuerySet(cls).paginate(page, page_size)
 
@@ -520,7 +538,7 @@ class Model(BaseModel, metaclass=ModelMeta):
         return await QuerySet(cls).first()
 
     @classmethod
-    async def all(cls) -> List[Self]:
+    async def all(cls) -> list[Self]:
         """select all models"""
         return await QuerySet(cls).all()
 
@@ -547,9 +565,9 @@ class Model(BaseModel, metaclass=ModelMeta):
         cls,
         *args: Any,
         defaults: Optional[DictStrAny] = None,
-        fetch_related: Union[bool, Tuple[Any, ...]] = False,
+        fetch_related: Union[bool, tuple[Any, ...]] = False,
         **kwargs: Any,
-    ) -> Tuple[Self, bool]:
+    ) -> tuple[Self, bool]:
         """select one model with filter condition, if not exist, create one"""
         queryset = cls.filter(*args, **kwargs)
         if fetch_related is True or isinstance(fetch_related, tuple):
@@ -573,9 +591,9 @@ class Model(BaseModel, metaclass=ModelMeta):
         cls,
         *args: Any,
         defaults: Optional[DictStrAny] = None,
-        fetch_related: Union[bool, Tuple[Any, ...]] = False,
+        fetch_related: Union[bool, tuple[Any, ...]] = False,
         **kwargs: Any,
-    ) -> Tuple[Self, bool]:
+    ) -> tuple[Self, bool]:
         """update one model with filter condition,
         if not exist, create one with filter and defaults values"""
         queryset = cls.filter(*args, **kwargs)
@@ -671,7 +689,7 @@ class Model(BaseModel, metaclass=ModelMeta):
         )
 
     @classmethod
-    def get_pk_columns(cls) -> Tuple[Column, ...]:
+    def get_pk_columns(cls) -> tuple[Column, ...]:
         """get primary key columns"""
         return tuple(getattr(cls, pk) for pk in cls.__meta__.primary_key)
 
@@ -772,7 +790,7 @@ class Model(BaseModel, metaclass=ModelMeta):
                 model_type.append(field_info.related_model)
 
     @classmethod
-    def _get_related_tables(cls, *args: Any) -> Optional[List[str]]:
+    def _get_related_tables(cls, *args: Any) -> Optional[list[str]]:
         if args:
             table_names = []
             for arg in args:
@@ -798,7 +816,7 @@ class Model(BaseModel, metaclass=ModelMeta):
         return table_names
 
     @classmethod
-    def _get_field_type_by_model(cls, model: "Model") -> Tuple[str, RelationshipField]:
+    def _get_field_type_by_model(cls, model: "Model") -> tuple[str, RelationshipField]:
         for field_name, field in cls.__fields__.items():
             if isinstance(
                 field.field_info,
@@ -1114,7 +1132,7 @@ class Model(BaseModel, metaclass=ModelMeta):
                 ] = table
 
         for index in cls.__meta__.indexes:
-            columns: List[Column] = [
+            columns: list[Column] = [
                 (
                     f.get_column()
                     if isinstance((f := getattr(cls, column_name)), RelatedModelProxy)
