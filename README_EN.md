@@ -35,7 +35,7 @@ All of its design is designed to be simple and easy to use, greatly reducing the
 
 ## Document
 
--> [Document](https://cherry.cherishmoon.fun/en/)
+-> [Document](https://cherry.cherishmoon.top/en/)
 
 ## Example
 

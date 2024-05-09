@@ -34,7 +34,7 @@
 
 ## 文档
 
--> [文档地址](https://cherry.cherishmoon.fun)
+-> [文档地址](https://cherry.cherishmoon.top)
 
 ## 示例
 
