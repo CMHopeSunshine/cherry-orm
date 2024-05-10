@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 
 class CompositeIndex:
@@ -8,7 +8,7 @@ class CompositeIndex:
         name: Optional[str] = None,
         unique: bool = False,
         quote: Optional[bool] = None,
-        info: Optional[Dict[Any, Any]] = None,
+        info: Optional[dict[Any, Any]] = None,
     ) -> None:
         self.name = name
         self.columns = columns

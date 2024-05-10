@@ -13,8 +13,8 @@ from .fields import (
     Unique as Unique,
 )
 from .meta import (
+    CherryConfig as CherryConfig,
     CompositeIndex as CompositeIndex,
-    MetaConfig as MetaConfig,
 )
 from .models import Model as Model
 from .typing import (

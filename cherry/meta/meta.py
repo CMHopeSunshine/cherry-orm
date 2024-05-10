@@ -1,11 +1,7 @@
 from typing import (
     Any,
     ClassVar,
-    Dict,
-    List,
     Optional,
-    Tuple,
-    Type,
 )
 
 from cherry.database import Database
@@ -26,25 +22,25 @@ class MetaConfig:
     database: ClassVar[Database]
     table: ClassVar[Table]
     metadata: ClassVar[MetaData]
-    columns: ClassVar[Dict[str, Column]]
-    constraints: ClassVar[List[ColumnCollectionConstraint]]
-    indexes: ClassVar[List[CompositeIndex]]
+    columns: ClassVar[dict[str, Column]]
+    constraints: ClassVar[list[ColumnCollectionConstraint]]
+    indexes: ClassVar[list[CompositeIndex]]
     abstract: ClassVar[bool]
-    primary_key: ClassVar[Tuple[str, ...]]
-    related_fields: ClassVar[Dict[str, ForeignKeyField]]
-    reverse_related_fields: ClassVar[Dict[str, ReverseRelationshipField]]
-    foreign_keys: ClassVar[Tuple[str, ...]]
-    many_to_many_fields: ClassVar[Dict[str, ManyToManyField]]
-    many_to_many_tables: ClassVar[Dict[str, Table]]
+    primary_key: ClassVar[tuple[str, ...]]
+    related_fields: ClassVar[dict[str, ForeignKeyField]]
+    reverse_related_fields: ClassVar[dict[str, ReverseRelationshipField]]
+    foreign_keys: ClassVar[tuple[str, ...]]
+    many_to_many_fields: ClassVar[dict[str, ManyToManyField]]
+    many_to_many_tables: ClassVar[dict[str, Table]]
     use_jsonb_in_postgres: ClassVar[bool]
     use_array_in_postgres: ClassVar[bool]
 
 
 def mix_meta_config(
-    self_config: Optional[Type[MetaConfig]],
-    parent_config: Type[MetaConfig],
+    self_config: Optional[type[MetaConfig]],
+    parent_config: type[MetaConfig],
     **namespace: Any,
-) -> Type[MetaConfig]:
+) -> type[MetaConfig]:
     if not self_config:
         base_classes = (parent_config,)
     elif self_config == parent_config:
@@ -56,7 +52,7 @@ def mix_meta_config(
 
 
 def init_meta_config(
-    meta_config: Type[MetaConfig],
+    meta_config: type[MetaConfig],
 ):
     if not hasattr(meta_config, "abstract"):
         meta_config.abstract = False

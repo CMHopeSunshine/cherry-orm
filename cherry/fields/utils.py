@@ -70,18 +70,14 @@ def validate_fields(
     model: ModelType,
     input_data: DictStrAny,
 ) -> DictStrAny:
-    if miss := set(input_data) - set(model.__fields__):
+    if miss := set(input_data) - set(model.model_fields):
         raise ValueError(f"{model.__name__} has no fields: {miss}")
 
     fields = {
-        k: (v.outer_type_, v.field_info)
-        for k, v in model.__fields__.items()
-        if k in input_data
+        k: (v.annotation, v) for k, v in model.model_fields.items() if k in input_data
     }
-    new_model = pydantic.create_model(model.__name__, **fields)  # type: ignore
-    values, _, validation_error = pydantic.validate_model(new_model, input_data)
-
-    if validation_error:
-        raise validation_error
-
-    return values
+    new_model: type[pydantic.BaseModel] = pydantic.create_model(
+        model.__name__,
+        **fields,
+    )  # type: ignore  # noqa: E501
+    return new_model.model_validate(input_data).model_dump()

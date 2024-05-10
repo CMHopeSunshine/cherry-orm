@@ -26,19 +26,19 @@ from cherry.fields.proxy import JsonFieldProxy, RelatedModelProxy
 from cherry.fields.types import get_sqlalchemy_type_from_field
 from cherry.meta.config import (
     CherryConfig,
-    CherryDatabaseConfig,
+    CherryMeta,
     default_pydantic_config,
     generate_cherry_config,
 )
-from cherry.meta.meta import MetaConfig
 from cherry.queryset.queryset import QuerySet
 from cherry.typing import AnyMapping, DictStrAny
 
+from khemia.typing import is_sequence_type
 from khemia.utils import classproperty
 from pydantic import PrivateAttr
 from pydantic._internal._generics import PydanticGenericMetadata
 from pydantic._internal._model_construction import ModelMetaclass
-from pydantic.fields import FieldInfo
+from pydantic.fields import _Unset, FieldInfo
 from pydantic.main import BaseModel
 from sqlalchemy import Column, ForeignKey, Index, MetaData, Table
 from sqlalchemy.sql.elements import ColumnElement
@@ -64,35 +64,27 @@ class ModelMeta(ModelMetaclass):
             cherry_config["abstract"] = False
             # cherry_database_config = CherryDatabaseConfig(**cherry_config)
 
-        # meta = type("Meta", (MetaConfig,), {})
-        # for base in reversed(bases):
-        #     if base != BaseModel and issubclass(base, Model):
-        #         meta = mix_meta_config(base.__meta__, MetaConfig)
-        # init_meta_config(meta)
-        # meta.tablename = cls_name
-        # if meta.abstract:
-        #     meta.abstract = False
-
-        cls: type["Model"] = super().__new__(
-            mcs,
-            cls_name,
-            bases,
-            namespace,
-            __pydantic_generic_metadata__,
-            __pydantic_reset_parent_namespace__,
-            _create_model_module,
-            **kwargs,
+        cls = cast(
+            type["Model"],
+            super().__new__(
+                mcs,
+                cls_name,
+                bases,
+                namespace,
+                __pydantic_generic_metadata__,
+                __pydantic_reset_parent_namespace__,
+                _create_model_module,
+                **kwargs,
+            ),
         )
 
-        meta_config = new_cls.__meta__
-
-        for field_name in new_cls.model_fields:
-            field_info = new_cls.model_fields[field_name]
+        for field_name in cls.model_fields:
+            field_info = cls.model_fields[field_name]
 
             if field_info.__class__ is FieldInfo:
-                field_info = new_cls.model_fields[
+                field_info = cls.model_fields[
                     field_name
-                ] = BaseField.from_base_field_info(
+                ] = BaseField.from_pydantic_field_info(
                     field_info,
                 )
             if isinstance(field_info, BaseField):
@@ -114,32 +106,61 @@ class ModelMeta(ModelMetaclass):
                     ),
                 )
 
-        if not meta_config.abstract and hasattr(meta_config, "database"):
-            meta_config.database.add_model(new_cls)
-            meta_config.primary_key = tuple(
-                field_name
-                for field_name, field in new_cls.model_fields.items()
-                if isinstance(field, BaseField) and field.primary_key
-            )
-            if len(meta_config.primary_key) == 0:
-                raise PrimaryKeyMissingError(
-                    f"Model {new_cls} must have at least one primary key",
-                )
+        # TODO: 移到init model时
+        # cherry_config = cls.cherry_config
 
-        return new_cls
+        # if not cls.cherry_config.get("abstract") and "database" in cls.cherry_config:
+        #     cls.cherry_config["database"].add_model(cls)
+
+        # meta_config.primary_key = tuple(
+        #     field_name
+        #     for field_name, field in new_cls.model_fields.items()
+        #     if isinstance(field, BaseField) and field.primary_key
+        # )
+        # if len(meta_config.primary_key) == 0:
+        #     raise PrimaryKeyMissingError(
+        #         f"Model {new_cls} must have at least one primary key",
+        #     )
+
+        cls.__meta__ = CherryMeta(
+            tablename=cls.cherry_config.get("tablename") or cls_name,
+        )
+        if (abstract := cls.cherry_config.get("abstract")) is not None:
+            cls.__meta__.abstract = abstract
+        if (database := cls.cherry_config.get("database")) is not None:
+            cls.__meta__.database = database
+            if not abstract:
+                database.add_model(cls)
+        cls.__meta__.primary_key = tuple(
+            field_name
+            for field_name, field in cls.model_fields.items()
+            if isinstance(field, BaseField) and field.primary_key
+        )
+
+        return cls
 
 
 class Model(BaseModel, metaclass=ModelMeta):
     model_config = default_pydantic_config.copy()
     cherry_config: ClassVar[CherryConfig]
-    cherry_database_config: ClassVar[CherryDatabaseConfig]
+    __meta__: ClassVar[CherryMeta]
     if TYPE_CHECKING:
-        __meta__: ClassVar[type[MetaConfig]]
+        model_fields: ClassVar[
+            dict[
+                str,
+                Union[
+                    BaseField,
+                    ForeignKeyField,
+                    ReverseRelationshipField,
+                    ManyToManyField,
+                ],
+            ]
+        ]
 
     if TYPE_CHECKING:
-        __cherry_foreign_key_values__: DictStrAny = Field(init=False)
+        _cherry_foreign_key_values_: DictStrAny = Field(init=False)
     else:
-        __cherry_foreign_key_values__: DictStrAny = PrivateAttr(default_factory=dict)
+        _cherry_foreign_key_values_: DictStrAny = PrivateAttr(default_factory=dict)
 
     @classproperty
     def tablename(cls) -> str:
@@ -325,10 +346,7 @@ class Model(BaseModel, metaclass=ModelMeta):
                     and rfield.related_model.tablename not in table_names
                 ):
                     continue
-                if (
-                    rfield.foreign_key_self_name
-                    not in self.__cherry_foreign_key_values__
-                ):
+                if rfield.foreign_key_self_name not in self._cherry_foreign_key_values_:
                     raise RelatedFieldMissingError(
                         (
                             "Can not fetch related model if not been inserted into or"
@@ -338,7 +356,7 @@ class Model(BaseModel, metaclass=ModelMeta):
                 related_data = await conn.execute(
                     rfield.related_model.table.select().where(
                         getattr(rfield.related_model, rfield.foreign_key)
-                        == self.__cherry_foreign_key_values__[
+                        == self._cherry_foreign_key_values_[
                             rfield.foreign_key_self_name
                         ],
                     ),
@@ -696,9 +714,9 @@ class Model(BaseModel, metaclass=ModelMeta):
     @classmethod
     def parse_from_db_dict(cls, data: DictStrAny) -> Self:
         """parse model from database result dict"""
-        model = cls.parse_obj(data)
+        model = cls.model_validate(data)
         for foreign_key in cls.__meta__.foreign_keys:
-            model.__cherry_foreign_key_values__[foreign_key] = data.pop(
+            model._cherry_foreign_key_values_[foreign_key] = data.pop(
                 foreign_key,
                 None,
             )
@@ -707,10 +725,10 @@ class Model(BaseModel, metaclass=ModelMeta):
     def update_from_dict(self, update_data: AnyMapping):
         """update model from dict"""
         for k, v in update_data.items():
-            if k in self.__fields__:
+            if k in self.model_fields:
                 setattr(self, k, v)
             elif k in self.__meta__.foreign_keys:
-                self.__cherry_foreign_key_values__[k] = v
+                self._cherry_foreign_key_values_[k] = v
 
     def update_from_kwargs(self, **kwargs: Any):
         """update model from kwargs"""
@@ -738,14 +756,14 @@ class Model(BaseModel, metaclass=ModelMeta):
             self_value = getattr(self, field_name)
             if self_value is None:
                 data[field.foreign_key_self_name] = None
-                self.__cherry_foreign_key_values__[field.foreign_key_self_name] = None
+                self._cherry_foreign_key_values_[field.foreign_key_self_name] = None
                 continue
             value = getattr(
                 self_value,
                 field.foreign_key,
             )
             data[field.foreign_key_self_name] = value
-            self.__cherry_foreign_key_values__[field.foreign_key_self_name] = value
+            self._cherry_foreign_key_values_[field.foreign_key_self_name] = value
             if not field.nullable and not data[field.foreign_key_self_name]:
                 raise ForeignKeyMissingError(
                     (
@@ -761,19 +779,18 @@ class Model(BaseModel, metaclass=ModelMeta):
         return all(getattr(self, pk) is None for pk in self.__meta__.primary_key)
 
     @classmethod
-    def update_forward_refs(cls, **localns: Any):
-        """update forward refs and check model type"""
-        super().update_forward_refs(**localns)
+    def model_rebuild(cls, **localns: Any):
+        """rebuild_model and check model type"""
+        super().model_rebuild()
         model_type = []
-        for _, field in cls.__fields__.items():
-            field_info = field.field_info
+        for field_info in cls.model_fields.values():
             if isinstance(
                 field_info,
                 RelationshipField,
             ):
                 if isinstance(field_info.related_model, ForwardRef):
-                    field_info.related_model = field.type_
-                if not issubclass(field_info.related_model, Model):
+                    field_info.related_model = field_info.annotation  # type: ignore
+                if not issubclass(field_info.related_model, Model):  # type: ignore
                     raise RelationSolveError(
                         (
                             'Related model must be a "cherry.Model", but got unexpected'
@@ -817,69 +834,79 @@ class Model(BaseModel, metaclass=ModelMeta):
 
     @classmethod
     def _get_field_type_by_model(cls, model: "Model") -> tuple[str, RelationshipField]:
-        for field_name, field in cls.__fields__.items():
+        for field_name, field_info in cls.model_fields.items():
             if isinstance(
-                field.field_info,
+                field_info,
                 RelationshipField,
-            ) and isinstance(model, field.field_info.related_model):
-                return field_name, field.field_info
+            ) and isinstance(model, field_info.related_model):
+                return field_name, field_info
         raise FieldTypeError(
             f"There are no related fields associated with {cls}.{model}",
         )
 
     @classmethod
     def _generate_sqlalchemy_column(cls):
-        if any(f for f in cls.__fields__.values() if isinstance(f.type_, ForwardRef)):
-            cls.update_forward_refs()
-        for model_field in cls.__fields__.values():
-            field_info = model_field.field_info
+        cls.model_rebuild()
+        # if any(f for f in cls.__fields__.values() if isinstance(f.type_, ForwardRef)):
+        #     cls.update_forward_refs()
+        for field_name, field_info in cls.model_fields.items():
             if isinstance(field_info, BaseField):
                 nullable, type_, is_json = get_sqlalchemy_type_from_field(
-                    model_field,
+                    field_info,
                     cls.__meta__,
                 )
                 if field_info.nullable is None:
                     field_info.nullable = nullable
-                cls.__meta__.columns[model_field.name] = Column(
-                    model_field.name,
+                default = (
+                    field_info.default
+                    if field_info.default is not _Unset
+                    else field_info.default_factory
+                    if field_info.default_factory is not _Unset
+                    else None
+                )
+                cls.__meta__.columns[field_name] = Column(
+                    field_name,
                     type_=type_,
                     primary_key=field_info.primary_key,
                     nullable=field_info.nullable,
                     index=field_info.index,
                     unique=field_info.unique,
                     autoincrement=field_info.autoincrement,
-                    default=field_info.default or field_info.default_factory or None,
+                    default=default,
                     **field_info.sa_column_extra,
                 )
                 if is_json:
                     setattr(
                         cls,
-                        model_field.name,
-                        JsonFieldProxy(cls.__meta__.columns[model_field.name]),
+                        field_name,
+                        JsonFieldProxy(cls.__meta__.columns[field_name]),
                     )
                 else:
                     setattr(
                         cls,
-                        model_field.name,
-                        cls.__meta__.columns[model_field.name],
+                        field_name,
+                        cls.__meta__.columns[field_name],
                     )
             elif isinstance(field_info, ForeignKeyField):
                 if not hasattr(field_info, "related_field_name"):
-                    for rname, rfield in field_info.related_model.__fields__.items():
+                    for (
+                        rname,
+                        rfield_info,
+                    ) in field_info.related_model.model_fields.items():  # noqa: E501
                         has_flag = False
                         if (
-                            isinstance(rfield.field_info, ReverseRelationshipField)
-                            and rfield.field_info.related_model is cls
+                            isinstance(rfield_info, ReverseRelationshipField)
+                            and rfield_info.related_model is cls
                             and (
-                                rfield.field_info.related_field_name == model_field.name
-                                or rfield.field_info.related_field_name is None
+                                rfield_info.related_field_name == field_name
+                                or rfield_info.related_field_name is None
                             )
                         ):
                             has_flag = True
                             field_info.related_field_name = rname
-                            field_info.related_field = rfield.field_info
-                            rfield.field_info.related_field_name = model_field.name
-                            rfield.field_info.related_field = field_info
+                            field_info.related_field = rfield_info
+                            rfield_info.related_field_name = field_name
+                            rfield_info.related_field = field_info
                             break
                         if not has_flag:
                             field_info.related_field_name = None
@@ -890,9 +917,9 @@ class Model(BaseModel, metaclass=ModelMeta):
                 ):
                     field_info.related_field = cast(
                         ReverseRelationshipField,
-                        field_info.related_model.__fields__[
+                        field_info.related_model.model_fields[
                             field_info.related_field_name
-                        ].field_info,
+                        ],
                     )
                 if not hasattr(field_info, "foreign_key"):
                     if len(field_info.related_model.__meta__.primary_key) != 1:
@@ -909,7 +936,7 @@ class Model(BaseModel, metaclass=ModelMeta):
                 field_info.foreign_key_self_name = (
                     f"{field_info.related_model.tablename}_{field_info.foreign_key}"  # noqa: E501
                 )
-                cls.__meta__.columns[model_field.name] = Column(
+                cls.__meta__.columns[field_name] = Column(
                     f"{field_info.related_model.tablename}_{field_info.foreign_key}",
                     ForeignKey(
                         f"{field_info.related_model.tablename}.{field_info.foreign_key}",
@@ -930,79 +957,90 @@ class Model(BaseModel, metaclass=ModelMeta):
                     nullable=field_info.nullable,
                     **field_info.sa_column_extra,
                 )
-                cls.__meta__.related_fields[model_field.name] = field_info
+                cls.__meta__.related_fields[field_name] = field_info
                 setattr(
                     cls,
-                    model_field.name,
+                    field_name,
                     RelatedModelProxy(
                         cls,
                         field_info.related_model,
-                        model_field.name,
+                        field_name,
                         field_info,
                     ),
                 )
                 setattr(
                     cls,
                     field_info.foreign_key_self_name,
-                    cls.__meta__.columns[model_field.name],
+                    cls.__meta__.columns[field_name],
                 )
             elif isinstance(field_info, ReverseRelationshipField):
                 # from pydantic.fields.py, 2 is list
-                if model_field.shape == 2:
+                # TODO: 重构对list的检查
+                if is_sequence_type(field_info.annotation):  # type: ignore
                     field_info.is_list = True
-                elif model_field.shape != 1:
-                    raise FieldTypeError(
-                        (
-                            'ReverseRelationshipField must be a "cherry.Model" type or'
-                            " alist of it"
-                        ),
-                    )
+                # if model_field.shape == 2:
+                #     field_info.is_list = True
+                # elif model_field.shape != 1:
+                #     raise FieldTypeError(
+                #         (
+                #            'ReverseRelationshipField must be a "cherry.Model" type or'
+                #             " alist of it"
+                #         ),
+                #     )
                 if not hasattr(field_info, "related_field_name"):
-                    for rname, rfield in field_info.related_model.__fields__.items():
+                    for (
+                        rname,
+                        rfield_info,
+                    ) in field_info.related_model.model_fields.items():  # noqa: E501
                         if (
-                            isinstance(rfield.field_info, ForeignKeyField)
-                            and rfield.field_info.related_model is cls
+                            isinstance(rfield_info, ForeignKeyField)
+                            and rfield_info.related_model is cls
                             and (
-                                rfield.field_info.related_field_name == model_field.name
-                                or rfield.field_info.related_field_name is None
+                                rfield_info.related_field_name == field_name
+                                or rfield_info.related_field_name is None
                             )
                         ):
                             field_info.related_field_name = rname
-                            field_info.related_field = rfield.field_info
-                            rfield.field_info.related_field_name = model_field.name
-                            rfield.field_info.related_field = field_info
+                            field_info.related_field = rfield_info
+                            rfield_info.related_field_name = field_name
+                            rfield_info.related_field = field_info
                             break
                 if hasattr(field_info, "related_field_name"):
-                    cls.__meta__.reverse_related_fields[model_field.name] = field_info
+                    cls.__meta__.reverse_related_fields[field_name] = field_info
                     setattr(
                         cls,
-                        model_field.name,
+                        field_name,
                         RelatedModelProxy(
                             cls,
                             field_info.related_model,
-                            model_field.name,
+                            field_name,
                             field_info,
                         ),
                     )
                     if not hasattr(field_info, "related_field"):
                         field_info.related_field = cast(
                             ForeignKeyField,
-                            field_info.related_model.__fields__[
+                            field_info.related_model.model_fields[
                                 field_info.related_field_name
-                            ].field_info,
+                            ],
                         )
                 else:
                     raise RelationSolveError(
                         (
                             "There are no related fields associated with"
-                            f" {cls}.{model_field.name}"
+                            f" {cls}.{field_name}"
                         ),
                     )
             elif isinstance(field_info, ManyToManyField):
-                if model_field.shape != 2:
+                # TODO: 重构对list的检查
+                if not is_sequence_type(field_info.annotation):  # type: ignore
                     raise FieldTypeError(
                         'ManyToManyField must be a list of "cherry.Model" type',
                     )
+                # if model_field.shape != 2:
+                #     raise FieldTypeError(
+                #         'ManyToManyField must be a list of "cherry.Model" type',
+                #     )
                 if not hasattr(field_info, "m2m_field_name"):
                     if len(cls.__meta__.primary_key) != 1:
                         raise PrimaryKeyMultipleError(
@@ -1014,49 +1052,52 @@ class Model(BaseModel, metaclass=ModelMeta):
                         )
                     field_info.m2m_field_name = cls.__meta__.primary_key[0]
                 if not hasattr(field_info, "related_field_name"):
-                    for rname, rfield in field_info.related_model.__fields__.items():
+                    for (
+                        rname,
+                        rfield_info,
+                    ) in field_info.related_model.model_fields.items():  # noqa: E501
                         if (
-                            isinstance(rfield.field_info, ManyToManyField)
-                            and rfield.field_info.related_model is cls
+                            isinstance(rfield_info, ManyToManyField)
+                            and rfield_info.related_model is cls
                             and (
                                 (
                                     rfn := getattr(
-                                        rfield.field_info,
+                                        rfield_info,
                                         "related_field_name",
                                         None,
                                     )
                                 )
                                 is None
-                                or rfn == model_field.name
+                                or rfn == field_name
                             )
                         ):
                             field_info.related_field_name = rname
-                            field_info.related_field = rfield.field_info
-                            rfield.field_info.related_field_name = model_field.name
-                            rfield.field_info.related_field = field_info
+                            field_info.related_field = rfield_info
+                            rfield_info.related_field_name = field_name
+                            rfield_info.related_field = field_info
                             break
                 if not hasattr(field_info, "related_field_name"):
                     raise RelationSolveError(
                         (
                             "There are no related fields associated with"
-                            f" {cls}.{model_field.name}"
+                            f" {cls}.{field_name}"
                         ),
                     )
                 if not hasattr(field_info, "related_field"):
                     field_info.related_field = cast(
                         ManyToManyField,
-                        field_info.related_model.__fields__[
+                        field_info.related_model.model_fields[
                             field_info.related_field_name
-                        ].field_info,
+                        ],
                     )
-                cls.__meta__.many_to_many_fields[model_field.name] = field_info
+                cls.__meta__.many_to_many_fields[field_name] = field_info
                 setattr(
                     cls,
-                    model_field.name,
+                    field_name,
                     RelatedModelProxy(
                         cls,
                         field_info.related_model,
-                        model_field.name,
+                        field_name,
                         field_info,
                     ),
                 )

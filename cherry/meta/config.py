@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, cast, TypedDict
 
 from cherry.database import Database
@@ -27,23 +27,25 @@ class CherryConfig(TypedDict, total=False):
 
 
 @dataclass
-class CherryDatabaseConfig:
+class CherryMeta:
     tablename: str
-    database: Database
-    table: Table
-    metadata: MetaData
+    database: Database = field(init=False)
+    table: Table = field(init=False)
+    metadata: MetaData = field(init=False)
     abstract: bool = False
-    constraints: list[ColumnCollectionConstraint] = []
-    indexes: list[CompositeIndex] = []
+    constraints: list[ColumnCollectionConstraint] = field(default_factory=list)
+    indexes: list[CompositeIndex] = field(default_factory=list)
     use_jsonb_in_postgres: bool = True
     use_array_in_postgres: bool = True
-    columns: dict[str, Column] = {}
-    primary_key: tuple[str, ...] = ()
-    related_fields: dict[str, ForeignKeyField] = {}
-    reverse_related_fields: dict[str, ReverseRelationshipField] = {}
-    foreign_keys: tuple[str, ...] = ()
-    many_to_many_fields: dict[str, ManyToManyField] = {}
-    many_to_many_tables: dict[str, Table] = {}
+    columns: dict[str, Column] = field(default_factory=dict)
+    primary_key: tuple[str, ...] = field(default_factory=tuple)
+    related_fields: dict[str, ForeignKeyField] = field(default_factory=dict)
+    reverse_related_fields: dict[str, ReverseRelationshipField] = field(
+        default_factory=dict,
+    )
+    foreign_keys: tuple[str, ...] = field(default_factory=tuple)
+    many_to_many_fields: dict[str, ManyToManyField] = field(default_factory=dict)
+    many_to_many_tables: dict[str, Table] = field(default_factory=dict)
 
 
 cherry_config_keys = set(CherryConfig.__annotations__.keys())

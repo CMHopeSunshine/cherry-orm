@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Dict, Optional, Type, TYPE_CHECKING, Union
+from typing import Any, Optional, TYPE_CHECKING, Union
 
 from sqlalchemy import Engine, event, make_url, MetaData, URL
 from sqlalchemy.ext.asyncio import (
@@ -23,7 +23,7 @@ NAMING_CONVENTION = {
 class Database:
     _engine: AsyncEngine
     _metadata: MetaData
-    _models: Dict[str, Type["Model"]] = {}
+    _models: dict[str, type["Model"]] = {}
     _url: URL
     _connect: Optional[AsyncConnection] = None
     _lock: asyncio.Lock = asyncio.Lock()
@@ -68,7 +68,7 @@ class Database:
     async def dispose(self) -> None:
         await self._engine.dispose()
 
-    def add_model(self, model: Type["Model"]) -> None:
+    def add_model(self, model: type["Model"]) -> None:
         self._models[model.__meta__.tablename] = model
         model.__meta__.database = self
 
