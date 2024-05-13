@@ -39,9 +39,14 @@ from sqlalchemy.sql.operators import and_
 @dataclass
 class QueryOptions:
     clause: OptionalClause = None
-    order_by: list[Any] = field(default_factory=list)
-    limit: Optional[int] = None
-    offset: Optional[int] = None
+    funcs: list[
+        tuple[Literal["order_by", "group_by", "limit", "offset", "distinct"], bool, Any]
+    ] = field(default_factory=list)
+    # order_by: list[Any] = field(default_factory=list)
+    # group_by: list[Any] = field(default_factory=list)
+    # limit: Optional[int] = None
+    # offset: Optional[int] = None
+    # distinct: Optional[int] = None
     related: list[Any] = field(default_factory=list)
     related_fields: dict[str, ForeignKeyField] = field(default_factory=dict)
     reverse_related_fields: dict[str, ReverseRelationshipField] = field(
@@ -74,12 +79,23 @@ class QueryOptions:
     def as_select_option(self, select_stat: Select):
         if self.clause is not None:
             select_stat = select_stat.where(self.clause)
-        if self.order_by:
-            select_stat = select_stat.order_by(*self.order_by)
-        if self.limit:
-            select_stat = select_stat.limit(self.limit)
-        if self.offset:
-            select_stat = select_stat.offset(self.offset)
+        for func_ in self.funcs:
+            if func_[0] == "distinct":
+                select_stat = select_stat.distinct()
+            elif func_[1]:
+                select_stat = getattr(select_stat, func_[0])(*func_[2])
+            else:
+                select_stat = getattr(select_stat, func_[0])(func_[2])
+        # if self.group_by:
+        #     select_stat = select_stat.group_by(*self.group_by)
+        # if self.order_by:
+        #     select_stat = select_stat.order_by(*self.order_by)
+        # if self.limit:
+        #     select_stat = select_stat.limit(self.limit)
+        # if self.offset:
+        #     select_stat = select_stat.offset(self.offset)
+        # if self.distinct:
+        #     select_stat = select_stat.distinct()
         if join_ := self.get_join(select_stat):
             select_stat = select_stat.join(*join_)
         return select_stat
@@ -107,16 +123,29 @@ class QuerySet(QuerySetProtocol, Generic[T_MODEL]):
             self.options.clause &= clause
         return self
 
+    def group_by(self, *args: Any) -> Self:
+        # self.options.group_by.extend(args)
+        self.options.funcs.append(("group_by", True, args))
+        return self
+
     def order_by(self, *args: Any) -> Self:
-        self.options.order_by.extend(args)
+        # self.options.order_by.extend(args)
+        self.options.funcs.append(("order_by", True, args))
         return self
 
     def limit(self, num: int) -> Self:
-        self.options.limit = num
+        # self.options.limit = num
+        self.options.funcs.append(("limit", False, num))
+        return self
+
+    def distinct(self, is_: bool = True) -> Self:
+        # self.options.distinct = is_
+        self.options.funcs.append(("distinct", False, is_))
         return self
 
     def offset(self, num: int) -> Self:
-        self.options.offset = num
+        # self.options.offset = num
+        self.options.funcs.append(("offset", False, num))
         return self
 
     def prefetch_related(self, *args: Any) -> Self:
@@ -241,7 +270,7 @@ class QuerySet(QuerySetProtocol, Generic[T_MODEL]):
                 self.options.as_select_option(
                     self.model_cls.table.select().order_by(func.random()),
                 ),
-            )
+            )  # type: ignore
             if result_one := result.fetchone():
                 data = result_one._asdict()
                 await self._fetch_one_related(conn, data)
@@ -251,8 +280,10 @@ class QuerySet(QuerySetProtocol, Generic[T_MODEL]):
     async def paginate(self, page: int, page_size: int) -> list[T_MODEL]:
         if page < 1 or page_size < 1:
             raise PaginateArgError("page and page_size must be positive")
-        self.options.limit = page_size
-        self.options.offset = (page - 1) * page_size
+        # self.options.limit = page_size
+        self.options.funcs.append(("limit", False, page_size))
+        # self.options.offset = (page - 1) * page_size
+        self.options.funcs.append(("offset", False, (page - 1) * page_size))
         return await self.all()
 
     async def delete(self) -> int:
@@ -487,7 +518,7 @@ class ValuesQuerySet(QuerySetProtocol, Generic[T, Unpack[Ts]]):
     async def first(self) -> Optional[tuple[T, Unpack[Ts]]]:
         async with self.model_cls.database as conn:
             result = await conn.execute(
-                self.options.as_select_option(select(self.query1, *self.querys)),
+                self.options.as_select_option(select(self.query1, *self.querys)),  # type: ignore
             )
             if result_one := result.fetchone():
                 return result_one._tuple()
@@ -507,7 +538,7 @@ class ValuesQuerySet(QuerySetProtocol, Generic[T, Unpack[Ts]]):
     async def all(self) -> list[tuple[T, Unpack[Ts]]]:
         async with self.model_cls.database as conn:
             result = await conn.execute(
-                self.options.as_select_option(select(self.query1, *self.querys)),
+                self.options.as_select_option(select(self.query1, *self.querys)),  # type: ignore
             )
             return [result_one._tuple() for result_one in result.fetchall()]
 
@@ -515,7 +546,7 @@ class ValuesQuerySet(QuerySetProtocol, Generic[T, Unpack[Ts]]):
         async with self.model_cls.database as conn:
             result = await conn.execute(
                 self.options.as_select_option(
-                    select(self.query1, *self.querys).order_by(func.random()),
+                    select(self.query1, *self.querys).order_by(func.random()),  # type: ignore
                 ),
             )
             if result_one := result.fetchone():
@@ -525,8 +556,10 @@ class ValuesQuerySet(QuerySetProtocol, Generic[T, Unpack[Ts]]):
     async def paginate(self, page: int, page_size: int) -> list[tuple[T, Unpack[Ts]]]:
         if page < 1 or page_size < 1:
             raise PaginateArgError("page and page_size must be positive")
-        self.options.limit = page_size
-        self.options.offset = (page - 1) * page_size
+        # self.options.limit = page_size
+        self.options.funcs.append(("limit", False, page_size))
+        # self.options.offset = (page - 1) * page_size
+        self.options.funcs.append(("offset", False, (page - 1) * page_size))
         return await self.all()
 
 
@@ -544,7 +577,7 @@ class ValueQuerySet(QuerySetProtocol, Generic[T]):
     async def first(self) -> Optional[T]:
         async with self.model_cls.database as conn:
             result = await conn.execute(
-                self.options.as_select_option(select(self.query)),
+                self.options.as_select_option(select(self.query)),  # type: ignore
             )
             if result_one := result.fetchone():
                 return result_one._tuple()[0]
@@ -563,14 +596,14 @@ class ValueQuerySet(QuerySetProtocol, Generic[T]):
     async def all(self) -> list[T]:
         async with self.model_cls.database as conn:
             result = await conn.execute(
-                self.options.as_select_option(select(self.query)),
+                self.options.as_select_option(select(self.query)),  # type: ignore
             )
             return [result_one._tuple()[0] for result_one in result.fetchall()]
 
     async def random_one(self) -> Optional[T]:
         async with self.model_cls.database as conn:
             result = await conn.execute(
-                self.options.as_select_option(select(self.query)).order_by(
+                self.options.as_select_option(select(self.query)).order_by(  # type: ignore
                     func.random(),
                 ),
             )
@@ -581,8 +614,10 @@ class ValueQuerySet(QuerySetProtocol, Generic[T]):
     async def paginate(self, page: int, page_size: int) -> list[T]:
         if page < 1 or page_size < 1:
             raise PaginateArgError("page and page_size must be positive")
-        self.options.limit = page_size
-        self.options.offset = (page - 1) * page_size
+        # self.options.limit = page_size
+        self.options.funcs.append(("limit", False, page_size))
+        # self.options.offset = (page - 1) * page_size
+        self.options.funcs.append(("offset", False, (page - 1) * page_size))
         return await self.all()
 
 
@@ -637,8 +672,10 @@ class ValueDictQuerySet(QuerySetProtocol):
     async def paginate(self, page: int, page_size: int) -> list[dict[str, Any]]:
         if page < 1 or page_size < 1:
             raise PaginateArgError("page and page_size must be positive")
-        self.options.limit = page_size
-        self.options.offset = (page - 1) * page_size
+        # self.options.limit = page_size
+        self.options.funcs.append(("limit", False, page_size))
+        # self.options.offset = (page - 1) * page_size
+        self.options.funcs.append(("offset", False, (page - 1) * page_size))
         return await self.all()
 
 
@@ -709,6 +746,8 @@ class CoalesceQuerySet(QuerySetProtocol, Generic[Unpack[Ts]]):
     ) -> list[Union[Unpack[Ts], None]]:
         if page < 1 or page_size < 1:
             raise PaginateArgError("page and page_size must be positive")
-        self.options.limit = page_size
-        self.options.offset = (page - 1) * page_size
+        # self.options.limit = page_size
+        self.options.funcs.append(("limit", False, page_size))
+        # self.options.offset = (page - 1) * page_size
+        self.options.funcs.append(("offset", False, (page - 1) * page_size))
         return await self.all()

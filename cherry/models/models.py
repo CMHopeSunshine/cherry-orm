@@ -200,11 +200,10 @@ class Model(BaseModel, metaclass=ModelMeta):
             if not exclude_related:
                 for name, rfield in self.__meta__.reverse_related_fields.items():
                     if related_values := getattr(self, name, None):
-                        related_values = cast(list[Model], related_values)
                         await asyncio.gather(
                             *[
                                 value.update(**{rfield.related_field_name: self})
-                                for value in related_values
+                                for value in cast(list[Model], related_values)
                             ],
                         )
         return self
@@ -525,7 +524,7 @@ class Model(BaseModel, metaclass=ModelMeta):
             async with cls.database as conn:
                 result = await conn.execute(
                     cls.table.delete(),
-                    [model.dict(by_alias=True) for model in models],
+                    [model.model_dump(by_alias=True) for model in models],
                 )
                 return result.rowcount
         raise ModelMissingError("You must give at least one model to delete")
@@ -748,7 +747,7 @@ class Model(BaseModel, metaclass=ModelMeta):
         )
         if exclude_pk:
             exclude |= set(self.__meta__.primary_key)
-        data = self.dict(by_alias=True, exclude=exclude)
+        data = self.model_dump(by_alias=True, exclude=exclude)
         data = {k: list(v) if isinstance(v, set) else v for k, v in data.items()}
         if exclude_related:
             return data
