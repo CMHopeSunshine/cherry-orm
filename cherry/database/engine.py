@@ -62,7 +62,10 @@ class Database:
 
     def init_all_model(self) -> None:
         for model in self._models.values():
-            model._generate_sqlalchemy_column()
+            model.model_rebuild()
+            model._pre_resolve_relationship_field()
+        for model in self._models.values():
+            model._resolve_sqlalchemy_column()
             model._generate_sqlalchemy_table(self._metadata)
 
     async def dispose(self) -> None:

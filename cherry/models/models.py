@@ -4,7 +4,6 @@ from typing import (
     Any,
     cast,
     ClassVar,
-    ForwardRef,
     Optional,
     TYPE_CHECKING,
     Union,
@@ -33,7 +32,12 @@ from cherry.meta.config import (
 from cherry.queryset.queryset import QuerySet
 from cherry.typing import AnyMapping, DictStrAny
 
-from khemia.typing import is_sequence_type
+from khemia.typing import (
+    check_issubclass,
+    get_args,
+    get_args_without_none,
+    is_sequence_type,
+)
 from khemia.utils import classproperty
 from pydantic import PrivateAttr
 from pydantic._internal._generics import PydanticGenericMetadata
@@ -57,12 +61,10 @@ class ModelMeta(ModelMetaclass):
         _create_model_module: Union[str, None] = None,
         **kwargs: Any,
     ) -> "ModelMeta":
-        # if bases:
         generate_cherry_config(bases, namespace, kwargs)
         cherry_config: CherryConfig = namespace["cherry_config"]
         if cherry_config.get("abstract"):
             cherry_config["abstract"] = False
-            # cherry_database_config = CherryDatabaseConfig(**cherry_config)
 
         cls = cast(
             type["Model"],
@@ -78,49 +80,11 @@ class ModelMeta(ModelMetaclass):
             ),
         )
 
-        for field_name in cls.model_fields:
-            field_info = cls.model_fields[field_name]
-
+        for field_name, field_info in cls.model_fields.items():
             if field_info.__class__ is FieldInfo:
-                field_info = cls.model_fields[
-                    field_name
-                ] = BaseField.from_pydantic_field_info(
+                cls.model_fields[field_name] = BaseField.from_pydantic_field_info(
                     field_info,
                 )
-            if isinstance(field_info, BaseField):
-                pass
-            elif isinstance(
-                field_info,
-                RelationshipField,
-            ):
-                if field_info.nullable is None:
-                    field_info.nullable = field_info.nullable
-                if field_info.annotation is None:
-                    raise FieldTypeError("field annotation can not be None")
-                field_info.related_model = field_info.annotation  # TODO: 存疑
-            else:
-                raise FieldTypeError(
-                    (
-                        'Field type must be "cherry.Field", got unexpected type: '
-                        f" {field_info.__class__}"
-                    ),
-                )
-
-        # TODO: 移到init model时
-        # cherry_config = cls.cherry_config
-
-        # if not cls.cherry_config.get("abstract") and "database" in cls.cherry_config:
-        #     cls.cherry_config["database"].add_model(cls)
-
-        # meta_config.primary_key = tuple(
-        #     field_name
-        #     for field_name, field in new_cls.model_fields.items()
-        #     if isinstance(field, BaseField) and field.primary_key
-        # )
-        # if len(meta_config.primary_key) == 0:
-        #     raise PrimaryKeyMissingError(
-        #         f"Model {new_cls} must have at least one primary key",
-        #     )
 
         cls.__meta__ = CherryMeta(
             tablename=cls.cherry_config.get("tablename") or cls_name,
@@ -136,6 +100,11 @@ class ModelMeta(ModelMetaclass):
             for field_name, field in cls.model_fields.items()
             if isinstance(field, BaseField) and field.primary_key
         )
+
+        if len(cls.__meta__.primary_key) == 0:
+            raise PrimaryKeyMissingError(
+                f"Model {cls} must have at least one primary key",
+            )
 
         return cls
 
@@ -732,7 +701,10 @@ class Model(BaseModel, metaclass=ModelMeta):
     def update_from_kwargs(self, **kwargs: Any):
         """update model from kwargs"""
         for k, v in kwargs.items():
-            setattr(self, k, v)
+            if k in self.model_fields:
+                setattr(self, k, v)
+            elif k in self.__meta__.foreign_keys:
+                self._cherry_foreign_key_values_[k] = v
 
     def _extract_db_fields(
         self,
@@ -778,34 +750,6 @@ class Model(BaseModel, metaclass=ModelMeta):
         return all(getattr(self, pk) is None for pk in self.__meta__.primary_key)
 
     @classmethod
-    def model_rebuild(cls, **localns: Any):
-        """rebuild_model and check model type"""
-        super().model_rebuild()
-        model_type = []
-        for field_info in cls.model_fields.values():
-            if isinstance(
-                field_info,
-                RelationshipField,
-            ):
-                if isinstance(field_info.related_model, ForwardRef):
-                    field_info.related_model = field_info.annotation  # type: ignore
-                if not issubclass(field_info.related_model, Model):  # type: ignore
-                    raise RelationSolveError(
-                        (
-                            'Related model must be a "cherry.Model", but got unexpected'
-                            f" type {field_info.related_model}"
-                        ),
-                    )
-                if field_info.related_model in model_type:
-                    raise RelationSolveError(
-                        (
-                            f"Related model {field_info.related_model} can appear only"
-                            f" once in {cls}"
-                        ),
-                    )
-                model_type.append(field_info.related_model)
-
-    @classmethod
     def _get_related_tables(cls, *args: Any) -> Optional[list[str]]:
         if args:
             table_names = []
@@ -844,10 +788,45 @@ class Model(BaseModel, metaclass=ModelMeta):
         )
 
     @classmethod
-    def _generate_sqlalchemy_column(cls):
-        cls.model_rebuild()
-        # if any(f for f in cls.__fields__.values() if isinstance(f.type_, ForwardRef)):
-        #     cls.update_forward_refs()
+    def _pre_resolve_relationship_field(cls):
+        for field_name, field_info in cls.model_fields.items():
+            if not isinstance(field_info, RelationshipField):
+                continue
+            is_nullable, type_ = get_args_without_none(field_info.annotation)  # type: ignore
+            if len(type_) != 1:
+                raise FieldTypeError(
+                    f"wrong type for model {cls}'s field {field_name}",
+                )
+            type_ = type_[0]
+            if is_sequence_type(type_):
+                type_ = get_args(type_)
+                if len(type_) != 1:
+                    raise FieldTypeError(
+                        f"wrong type for Model {cls}'s field {field_name}",
+                    )
+                type_ = type_[0]
+                if isinstance(field_info, ReverseRelationshipField):
+                    field_info.is_list = True
+                elif isinstance(field_info, ForeignKeyField):
+                    raise FieldTypeError(
+                        f"Model {cls}'s ForeignKeyField {field_name} "
+                        "types must be a subclass of Cherry.Model",
+                    )
+            elif isinstance(field_info, ManyToManyField):
+                raise FieldTypeError(
+                    f"Model {cls}'s ManyToManyField {field_name} types"
+                    " must be a sequence type of Cherry.Model",
+                )
+            if not check_issubclass(type_, Model):
+                raise FieldTypeError(
+                    f"Model {cls}'s RelationshipField {field_name} types"
+                    " must be a subclass of Cherry.Model",
+                )
+            field_info.nullable = is_nullable
+            field_info.related_model = type_
+
+    @classmethod
+    def _resolve_sqlalchemy_column(cls):
         for field_name, field_info in cls.model_fields.items():
             if isinstance(field_info, BaseField):
                 nullable, type_, is_json = get_sqlalchemy_type_from_field(
@@ -973,19 +952,6 @@ class Model(BaseModel, metaclass=ModelMeta):
                     cls.__meta__.columns[field_name],
                 )
             elif isinstance(field_info, ReverseRelationshipField):
-                # from pydantic.fields.py, 2 is list
-                # TODO: 重构对list的检查
-                if is_sequence_type(field_info.annotation):  # type: ignore
-                    field_info.is_list = True
-                # if model_field.shape == 2:
-                #     field_info.is_list = True
-                # elif model_field.shape != 1:
-                #     raise FieldTypeError(
-                #         (
-                #            'ReverseRelationshipField must be a "cherry.Model" type or'
-                #             " alist of it"
-                #         ),
-                #     )
                 if not hasattr(field_info, "related_field_name"):
                     for (
                         rname,
@@ -1031,15 +997,6 @@ class Model(BaseModel, metaclass=ModelMeta):
                         ),
                     )
             elif isinstance(field_info, ManyToManyField):
-                # TODO: 重构对list的检查
-                if not is_sequence_type(field_info.annotation):  # type: ignore
-                    raise FieldTypeError(
-                        'ManyToManyField must be a list of "cherry.Model" type',
-                    )
-                # if model_field.shape != 2:
-                #     raise FieldTypeError(
-                #         'ManyToManyField must be a list of "cherry.Model" type',
-                #     )
                 if not hasattr(field_info, "m2m_field_name"):
                     if len(cls.__meta__.primary_key) != 1:
                         raise PrimaryKeyMultipleError(

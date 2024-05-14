@@ -67,7 +67,7 @@ class RelationshipField(CherryField):
 
 class ForeignKeyField(RelationshipField):
     related_field: Optional["ReverseRelationshipField"] = None
-    related_field_name: Optional[str]
+    related_field_name: Optional[str] = None
     foreign_key: str
     foreign_key_self_name: str
     sa_column_extra: dict[str, Any]

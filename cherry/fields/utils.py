@@ -78,6 +78,6 @@ def validate_fields(
     }
     new_model: type[pydantic.BaseModel] = pydantic.create_model(
         model.__name__,
-        **fields,
-    )  # type: ignore  # noqa: E501
+        **fields,  # type: ignore
+    )
     return new_model.model_validate(input_data).model_dump()
