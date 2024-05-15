@@ -6,7 +6,7 @@ from cherry.fields.fields import (
 )
 from cherry.fields.proxy import RelatedModelProxy
 from cherry.fields.types import AutoString
-from cherry.meta import MetaConfig
+from cherry.meta.config import CherryMeta
 from tests.database import database
 from tests.models import Post, School, Student, Tag, User
 
@@ -16,8 +16,8 @@ import sqlalchemy.types as sa_types
 
 @pytest.mark.asyncio
 async def test_no_related():
-    assert User.__fields__.keys() == {"id", "name", "introduce", "age", "money"}
-    assert issubclass(User.__meta__, MetaConfig)
+    assert User.model_fields.keys() == {"id", "name", "introduce", "age", "money"}
+    assert isinstance(User.__meta__, CherryMeta)
     assert User.__meta__.tablename == "User"
     assert User.__meta__.database == database
     assert User.__meta__.table is not None
@@ -38,15 +38,15 @@ async def test_no_related():
     assert User.__meta__.constraints == []
     assert not User.__meta__.abstract
 
-    assert User.__fields__.keys() == {"id", "name", "introduce", "age", "money"}
-    assert isinstance(User.__fields__["id"].field_info, BaseField)
-    assert User.__fields__["id"].field_info.primary_key
-    assert User.__fields__["id"].field_info.autoincrement
-    assert not User.__fields__["id"].field_info.nullable
-    assert isinstance(User.__fields__["name"].field_info, BaseField)
-    assert isinstance(User.__fields__["introduce"].field_info, BaseField)
-    assert isinstance(User.__fields__["age"].field_info, BaseField)
-    assert isinstance(User.__fields__["money"].field_info, BaseField)
+    assert User.model_fields.keys() == {"id", "name", "introduce", "age", "money"}
+    assert isinstance(User.model_fields["id"], BaseField)
+    assert User.model_fields["id"].primary_key
+    assert User.model_fields["id"].autoincrement
+    assert not User.model_fields["id"].nullable
+    assert isinstance(User.model_fields["name"], BaseField)
+    assert isinstance(User.model_fields["introduce"], BaseField)
+    assert isinstance(User.model_fields["age"], BaseField)
+    assert isinstance(User.model_fields["money"], BaseField)
 
     assert User.__meta__.primary_key == ("id",)
     assert User.__meta__.related_fields == {}
@@ -75,9 +75,9 @@ async def test_one_to_many():
         (sa_types.NullType, sa_types.Integer),
     )
     assert Student.__meta__.columns["school"].name == "School_id"
-    assert isinstance(Student.__fields__["school"].field_info, ForeignKeyField)
+    assert isinstance(Student.model_fields["school"], ForeignKeyField)
     assert Student.__meta__.related_fields == {
-        "school": Student.__fields__["school"].field_info,
+        "school": Student.model_fields["school"],
     }
 
     assert School.__meta__.columns.keys() == {"id", "name"}
@@ -86,11 +86,11 @@ async def test_one_to_many():
         and School.students.related_model is Student
     )
     assert isinstance(
-        School.__fields__["students"].field_info,
+        School.model_fields["students"],
         ReverseRelationshipField,
     )
     assert School.__meta__.reverse_related_fields == {
-        "students": School.__fields__["students"].field_info,
+        "students": School.model_fields["students"],
     }
 
 
@@ -98,21 +98,21 @@ async def test_one_to_many():
 async def test_many_to_many():
     assert Tag.__meta__.columns.keys() == {"name"}
     assert isinstance(Tag.posts, RelatedModelProxy) and Tag.posts.related_model is Post
-    assert isinstance(Tag.__fields__["posts"].field_info, ManyToManyField)
+    assert isinstance(Tag.model_fields["posts"], ManyToManyField)
     assert Tag.__meta__.many_to_many_fields == {
-        "posts": Tag.__fields__["posts"].field_info,
+        "posts": Tag.model_fields["posts"],
     }
-    tag_field = Tag.__fields__["posts"].field_info
+    tag_field = Tag.model_fields["posts"]
     assert tag_field.m2m_field_name == "name"
     assert tag_field.m2m_table_field_name == "Tag_name"
 
     assert Post.__meta__.columns.keys() == {"id", "title"}
     assert isinstance(Post.tags, RelatedModelProxy) and Post.tags.related_model is Tag
-    assert isinstance(Post.__fields__["tags"].field_info, ManyToManyField)
+    assert isinstance(Post.model_fields["tags"], ManyToManyField)
     assert Post.__meta__.many_to_many_fields == {
-        "tags": Post.__fields__["tags"].field_info,
+        "tags": Post.model_fields["tags"],
     }
-    post_field = Post.__fields__["tags"].field_info
+    post_field = Post.model_fields["tags"]
     assert post_field.m2m_field_name == "id"
     assert post_field.m2m_table_field_name == "Post_id"
 

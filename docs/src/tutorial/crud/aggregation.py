@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import Union
 
 import cherry
 
@@ -11,9 +11,7 @@ class User(cherry.Model):
     age: int
     money: int
 
-    class Meta:
-        database = db
-        tablename = "user"
+    cherry_config = cherry.CherryConfig(tablename="user", database=db)
 
 
 async def main():
@@ -32,7 +30,7 @@ async def main():
     c: Union[str, int, None] = (
         await User.select().coalesce(User.name, User.money).first()
     )
-    cs: List[Union[str, int, None]] = (
+    cs: list[Union[str, int, None]] = (
         await User.select().coalesce(User.name, User.money).all()
     )
 

@@ -33,7 +33,7 @@ async def test_one_to_many():
     assert student2.school == school1
 
     await school1.fetch_related()
-    assert school1.students == [student1, student2]
+    assert [s.id for s in school1.students] == [student1.id, student2.id]
 
     student3 = await Student(name="student 3").insert()
     student4 = await Student(name="student 4").insert()
@@ -42,8 +42,8 @@ async def test_one_to_many():
 
     await student3.fetch_related()
     await student4.fetch_related()
-    assert school2.students[0].name == student3.name
-    assert school2.students[1].name == student4.name
+    assert school2.students[0].id == student3.id
+    assert school2.students[1].id == student4.id
 
     student5 = await Student(
         name="student 5",
@@ -59,8 +59,7 @@ async def test_one_to_many():
     ).insert_with_related()
     assert school4.id == 4
     assert (
-        school4.students[0].name == student6.name
-        and school4.students[1].name == student7.name
+        school4.students[0].id == student6.id and school4.students[1].id == student7.id
     )
 
 

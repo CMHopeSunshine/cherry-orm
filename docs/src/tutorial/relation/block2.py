@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Optional
 
 import cherry
 
@@ -10,19 +10,15 @@ class Student(cherry.Model):
     name: str
     school: cherry.ForeignKey[Optional["School"]] = None
 
-    class Meta:
-        database = db
-        tablename = "student"
+    cherry_config = cherry.CherryConfig(tablename="student", database=db)
 
 
 class School(cherry.Model):
     id: cherry.AutoIntPK = None
     name: str
-    students: cherry.ReverseRelation[List[Student]] = []
+    students: cherry.ReverseRelation[list[Student]] = []
 
-    class Meta:
-        database = db
-        tablename = "school"
+    cherry_config = cherry.CherryConfig(tablename="school", database=db)
 
 
 async def main():
@@ -46,9 +42,9 @@ async def main():
     await student4.insert_with_related()
 
     # Pythonic Style
-    student: List[Student] = await Student.filter(School.name == "school 2").all()
+    student: list[Student] = await Student.filter(School.name == "school 2").all()
     # Django Style
-    student: List[Student] = await Student.filter(school_name="school 2").all()
+    student: list[Student] = await Student.filter(school_name="school 2").all()
 
     student_with_school: Student = (
         await Student.filter(Student.name == "student 1")
@@ -62,7 +58,7 @@ async def main():
         .get()
     )
 
-    schools_with_students: List[School] = (
+    schools_with_students: list[School] = (
         await School.select_related().prefetch_related(School.students).all()
     )
 

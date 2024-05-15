@@ -8,7 +8,7 @@
 
 要声明一对一关系，只需使用 `cherry.ForeignKey` 注解包裹对应的模型即可，在对应的模型上则使用 `cherry.ReverseRelation` 来声明反向关系。
 
-```python hl_lines="11 21"
+```python hl_lines="11 19"
 --8<-- "./tutorial/relation/block1.py"
 ```
 
@@ -16,7 +16,7 @@
 
 一对多和一对一关系类似，只需要把 `cherry.ReverseRelation[Model]` 改成 `cherry.ReverseRelation[List[Model]]`，注解为模型列表即可。
 
-```python hl_lines="11 21"
+```python hl_lines="11 19"
 --8<-- "./tutorial/relation/block2.py"
 ```
 
@@ -24,7 +24,7 @@
 
 多对多关系关系则使用 `cherry.ManyToMany` 来注解。
 
-```python hl_lines="11 21"
+```python hl_lines="9 17"
 --8<-- "./tutorial/relation/block3.py"
 ```
 
@@ -56,12 +56,12 @@
 
 #### 一对一、一对多
 
-```python hl_lines="4 19"
---8<-- "./tutorial/relation/block4.py:8:30"
+```python hl_lines="4 17"
+--8<-- "./tutorial/relation/block4.py:8:26"
 ```
 
 #### 多对多
 
-```python hl_lines="5 21"
---8<-- "./tutorial/relation/block4.py:33:57"
+```python hl_lines="5 19"
+--8<-- "./tutorial/relation/block4.py:27:57"
 ```

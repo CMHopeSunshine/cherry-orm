@@ -68,13 +68,13 @@
 --8<-- "./tutorial/definition/block6.py:0:3"
 ```
 
-然后通过模型的 `Meta` 类，将数据库对象绑定到模型上：
+然后通过模型的 `cherry_config`字段 ，将数据库对象绑定到模型上：
 
-```python hl_lines="8"
+```python hl_lines="6"
 --8<-- "./tutorial/definition/block6.py:4:13"
 ```
 
-在 `Meta` 类中，你还可以定义以下配置：
+在 `cherry_config` 中，你还可以定义以下配置：
 
 - database - `cherry.Database` 对象，默认无。
 - tablename - 模型在数据库中的表名。默认使用模型的类名作为表名，例如本处的 `User`。
@@ -84,11 +84,10 @@
 - use_jsonb_in_postgres - 在 postgresql 数据库中 Mapping 等类型使用 jsonb，默认为 `True`。
 - use_array_in_postgres - 在 postgresql 数据库中 Iterable 等类型使用 array，默认为 `True`。
 
-
 ## 模型初始化
 
 在绑定数据库对象后，你还需要在你的入口文件中调用 `Database.init` 方法，对模型以及数据库进行初始化才能使用。
 
 ```python hl_lines="2"
---8<-- "./tutorial/definition/block6.py:16:23"
+--8<-- "./tutorial/definition/block6.py:14:21"
 ```

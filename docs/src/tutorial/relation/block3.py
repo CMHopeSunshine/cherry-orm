@@ -1,5 +1,3 @@
-from typing import List
-
 import cherry
 
 db = cherry.Database("sqlite+aiosqlite:///:memory:")
@@ -8,21 +6,17 @@ db = cherry.Database("sqlite+aiosqlite:///:memory:")
 class Tag(cherry.Model):
     id: cherry.AutoIntPK = None
     content: str
-    posts: cherry.ManyToMany[List["Post"]] = []
+    posts: cherry.ManyToMany[list["Post"]] = []
 
-    class Meta:
-        database = db
-        tablename = "tag"
+    cherry_config = cherry.CherryConfig(tablename="tag", database=db)
 
 
 class Post(cherry.Model):
     id: cherry.AutoIntPK = None
     title: str
-    tags: cherry.ManyToMany[List[Tag]] = []
+    tags: cherry.ManyToMany[list[Tag]] = []
 
-    class Meta:
-        database = db
-        tablename = "post"
+    cherry_config = cherry.CherryConfig(tablename="post", database=db)
 
 
 async def main():

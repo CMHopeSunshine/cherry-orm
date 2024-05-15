@@ -21,7 +21,7 @@
 你也可以在模型实例上调用 `fetch_related`，来让该模型实例获取与它相关联的模型，它的参数与 `prefetch_related` 相同。
 
 ```python hl_lines="2"
---8<-- "./tutorial/relation/block2.py:69:71"
+--8<-- "./tutorial/relation/block2.py:65:67"
 ```
 
 ## 插入
@@ -29,7 +29,7 @@
 ### `insert`
 
 ```python hl_lines="2 4"
---8<-- "./tutorial/relation/block2.py:31:34"
+--8<-- "./tutorial/relation/block2.py:27:30"
 ```
 
 !!! note "关系字段"
@@ -43,7 +43,7 @@
 你可以使用模型实例的 `insert_with_related` 方法，将关系模型连同自身一起插入到数据库中：
 
 ```python hl_lines="8 11"
---8<-- "./tutorial/relation/block2.py:36:46"
+--8<-- "./tutorial/relation/block2.py:32:42"
 ```
 
 这样就可以省去先插入关系模型的步骤了。
@@ -55,7 +55,7 @@
 如果提供的模型是非多对多关系字段模型，则会抛出异常。
 
 ```python hl_lines="7 8 10"
---8<-- "./tutorial/relation/block3.py:31:46"
+--8<-- "./tutorial/relation/block3.py:25:37"
 ```
 
 ## 删除
@@ -69,7 +69,7 @@
 如果提供的模型是非多对多关系字段模型，则会抛出异常。
 
 ```python hl_lines="1"
---8<-- "./tutorial/relation/block3.py:48:52"
+--8<-- "./tutorial/relation/block3.py:42:46"
 ```
 
 ## 完整代码

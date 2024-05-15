@@ -3,25 +3,28 @@ from decimal import Decimal
 from enum import Enum
 import ipaddress
 from pathlib import Path
-from typing import Any, cast, Tuple, Type, Union
+from typing import Any, cast, Optional, Union
 from uuid import UUID
 
 from cherry.exception import FieldTypeError
-from cherry.meta import MetaConfig
+from cherry.meta.config import CherryMeta
 
+from annotated_types import MaxLen
 from khemia.typing import (
     all_literal_values,
+    check_isinstance,
     check_issubclass,
     get_args,
-    get_type_from_optional,
+    get_args_without_none,
     is_annotated,
     is_dataclass,
     is_iterable_type,
-    is_json_like_type,
     is_literal_type,
     is_mapping_type,
+    is_none_type,
+    is_sequence_type,
 )
-from pydantic.fields import ModelField
+from pydantic.fields import FieldInfo
 from pydantic.main import BaseModel
 from sqlalchemy import types
 from sqlalchemy.dialects.postgresql import (
@@ -72,7 +75,7 @@ class Json(types.TypeDecorator):
         return dialect.type_descriptor(types.JSON())
 
 
-def sa_to_py_type(type_: Type[Any], config: Type[MetaConfig]):
+def sa_to_py_type(type_: type[Any], config: CherryMeta):
     if issubclass(type_, bool):
         return types.Boolean
     elif issubclass(type_, Enum):
@@ -112,7 +115,8 @@ def sa_to_py_type(type_: Type[Any], config: Type[MetaConfig]):
     elif (
         is_dataclass(type_)
         or check_issubclass(type_, BaseModel)
-        or is_json_like_type(type_)
+        or is_mapping_type(type_)
+        or is_sequence_type(type_)
     ):
         return Json(config.use_jsonb_in_postgres)
     else:
@@ -120,14 +124,21 @@ def sa_to_py_type(type_: Type[Any], config: Type[MetaConfig]):
 
 
 def get_sqlalchemy_type_from_field(
-    field: ModelField,
-    config: Type[MetaConfig],
-) -> Tuple[bool, Union[Type[TypeEngine], TypeEngine], bool]:
-    if is_annotated(field.annotation):
-        type_ = get_args(field.annotation)[0]
+    field_info: FieldInfo,
+    config: CherryMeta,
+) -> tuple[bool, Union[type[TypeEngine], TypeEngine], bool]:
+    if not field_info.annotation or is_none_type(field_info.annotation):
+        raise FieldTypeError("field type can not be None")
+    if is_annotated(field_info.annotation):
+        type_ = get_args(field_info.annotation)[0]
     else:
-        type_ = field.annotation
-    is_optional, type_ = get_type_from_optional(type_)
+        type_ = field_info.annotation
+    is_optional, types_ = get_args_without_none(type_)
+    if not types_:
+        raise FieldTypeError(
+            f"{type_} has no matching SQLAlchemy type",
+        )
+    type_ = types_[0]
     if is_literal_type(type_):
         values = all_literal_values(type_)
         if all(issubclass(type(v), type(values[0])) for v in values[1:]):
@@ -151,15 +162,21 @@ def get_sqlalchemy_type_from_field(
         args = get_args(type_)
         if not args:
             return is_optional, Json(config.use_jsonb_in_postgres), True
-        _, arg_python_type = get_type_from_optional(args[0])
-        if arg_type := sa_to_py_type(arg_python_type, config):
+        _, arg_python_types = get_args_without_none(args[0])
+        if not arg_python_types:
+            return is_optional, Json(config.use_jsonb_in_postgres), True
+        if arg_type := sa_to_py_type(arg_python_types[0], config):
             return is_optional, Array(arg_type), True
         return is_optional, Json(config.use_jsonb_in_postgres), True
     if issubclass(type_, str):
-        if getattr(field.field_info, "long_text", False):
+        if getattr(field_info, "long_text", False):
             return is_optional, types.Text, False
         else:
-            return is_optional, AutoString(length=field.field_info.max_length), False
+            return (
+                is_optional,
+                AutoString(length=get_field_max_length(field_info)),
+                False,
+            )
     if (type_ := sa_to_py_type(type_, config)) is not None:
         return is_optional, type_, False
     if is_dataclass(type_):
@@ -167,3 +184,10 @@ def get_sqlalchemy_type_from_field(
     raise FieldTypeError(
         f"{type_} has no matching SQLAlchemy type",
     )
+
+
+def get_field_max_length(field_info: FieldInfo) -> Optional[int]:
+    for metadata in field_info.metadata:
+        if check_isinstance(metadata, MaxLen):
+            return metadata.max_length
+    return None

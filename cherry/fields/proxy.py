@@ -1,13 +1,9 @@
 import abc
+from collections.abc import Iterable, Mapping
 import operator
 from typing import (
     Any,
     Callable,
-    Iterable,
-    List,
-    Mapping,
-    Tuple,
-    Type,
     TYPE_CHECKING,
     Union,
 )
@@ -53,7 +49,7 @@ class ModelClauseBase(abc.ABC):
 class ModelClause(ModelClauseBase):
     def __init__(
         self,
-        model_cls: Type["Model"],
+        model_cls: type["Model"],
         value: Any,
         field_name: str,
         field: Union[ForeignKeyField, ReverseRelationshipField, ManyToManyField],
@@ -144,7 +140,7 @@ class JsonFieldClause(ModelClauseBase):
         self,
         ce: ColumnElement[JSON],
         value: Any,
-        path: List[str],
+        path: list[str],
         op: OperatorFunc = operator.eq,
     ) -> None:
         self.ce = ce
@@ -168,7 +164,7 @@ class JsonFieldClause(ModelClauseBase):
 def conversion_type(
     ce: ColumnElement[JSON],
     value: Any,
-) -> Tuple[ColumnElement[JSON], Any]:
+) -> tuple[ColumnElement[JSON], Any]:
     if isinstance(value, str):
         return ce.as_string(), value
     if isinstance(value, int):
@@ -188,7 +184,7 @@ class JsonFieldPathProxy:
     def __init__(
         self,
         column: Column,
-        path: List[str],
+        path: list[str],
     ) -> None:
         self.column: Column[JSON] = column
         self.path = path
