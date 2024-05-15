@@ -9,13 +9,13 @@
 === "Pythonic style"
 
     ```python
-    --8<-- "./tutorial/crud/query.py:25:25"
+    --8<-- "./tutorial/crud/query.py:23:23"
     ```
 
 === "Djange style"
 
     ```python
-    --8<-- "./tutorial/crud/query.py:27:27"
+    --8<-- "./tutorial/crud/query.py:25:25"
     ```
 
 ## `get_or_none`
@@ -25,13 +25,13 @@
 === "Pythonic style"
 
     ```python
-    --8<-- "./tutorial/crud/query.py:30:30"
+    --8<-- "./tutorial/crud/query.py:28:28"
     ```
 
 === "Djange style"
 
     ```python
-    --8<-- "./tutorial/crud/query.py:32:32"
+    --8<-- "./tutorial/crud/query.py:30:30"
     ```
 
 ## `get_or_create`
@@ -43,13 +43,13 @@
 === "Pythonic style"
 
     ```python
-    --8<-- "./tutorial/crud/query.py:35:38"
+    --8<-- "./tutorial/crud/query.py:33:36"
     ```
 
 === "Djange style"
 
     ```python
-    --8<-- "./tutorial/crud/query.py:40:43"
+    --8<-- "./tutorial/crud/query.py:38:41"
     ```
 
 ## `filter`
@@ -61,13 +61,13 @@
 === "Pythonic style"
 
     ```python
-    --8<-- "./tutorial/crud/query.py:46:50"
+    --8<-- "./tutorial/crud/query.py:44:48"
     ```
 
 === "Djange style"
 
     ```python
-    --8<-- "./tutorial/crud/query.py:53:57"
+    --8<-- "./tutorial/crud/query.py:51:55"
     ```
 
 ### `first`
@@ -95,7 +95,7 @@
 根据给定的字段对查询结果进行排序
 
 ```python
---8<-- "./tutorial/crud/query.py:59:59"
+--8<-- "./tutorial/crud/query.py:57:57"
 ```
 
 ### `limit`
@@ -103,7 +103,7 @@
 根据给定的值对查询结果的数量进行限制
 
 ```python
---8<-- "./tutorial/crud/query.py:60:60"
+--8<-- "./tutorial/crud/query.py:58:58"
 ```
 
 ### `offset`
@@ -111,7 +111,7 @@
 根据给定的值对查询结果进行偏移
 
 ```python
---8<-- "./tutorial/crud/query.py:61:61"
+--8<-- "./tutorial/crud/query.py:59:59"
 ```
 
 ### `values`
@@ -123,7 +123,7 @@
 `values` 还有一个关键字参数 `flatten`，默认为 `False`，当设置为 `True` 时，位置参数必须有且仅有一个，返回结果元组会被展平。
 
 ```python
---8<-- "./tutorial/crud/query.py:63:71"
+--8<-- "./tutorial/crud/query.py:61:69"
 ```
 
 ### `value_dict`
@@ -133,7 +133,7 @@
 `value_dict` 接受多个位置参数，即要获取的模型字段，若不传入，则为模型全部非关系字段。
 
 ```python
---8<-- "./tutorial/crud/query.py:73:76"
+--8<-- "./tutorial/crud/query.py:71:74"
 ```
 
 ## `select`
@@ -145,7 +145,7 @@
 它是 `Model.filter().all()` 的简写，返回该模型所有模型数据。
 
 ```python
---8<-- "./tutorial/crud/query.py:78:78"
+--8<-- "./tutorial/crud/query.py:76:76"
 ```
 
 ## 完整代码

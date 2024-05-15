@@ -5,7 +5,7 @@
 你可以在修改模型的字段后，调用模型的 `save` 来让修改结果更新到数据库中：
 
 ```python hl_lines="4"
---8<-- "./tutorial/crud/update.py:22:25"
+--8<-- "./tutorial/crud/update.py:20:23"
 ```
 
 ???+ note "有则更新无则插入"
@@ -16,7 +16,7 @@
 或者使用 `update` 方法，传入要更新的值来更新：
 
 ```python
---8<-- "./tutorial/crud/update.py:27:27"
+--8<-- "./tutorial/crud/update.py:25:25"
 ```
 
 ## `update_or_create`
@@ -26,7 +26,7 @@
 返回值类型为 `Tuple[Model, bool]`，第一个值为模型实例，第二个值是 `bool` 类型，`True` 表示更新了模型实例，`False` 表示创建了模型实例。
 
 ```python
---8<-- "./tutorial/crud/update.py:29:32"
+--8<-- "./tutorial/crud/update.py:27:30"
 ```
 
 它接受若干的查询条件，以及一个类型为 `Dict[str, Any]` 的 `defaults` 参数，用于指定要更新的字段及其值。
@@ -38,7 +38,7 @@
 使用模型类的 `save_many` 来同时更新多条数据：
 
 ```python
---8<-- "./tutorial/crud/update.py:34:41"
+--8<-- "./tutorial/crud/update.py:32:39"
 ```
 
 ## 完整代码

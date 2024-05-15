@@ -11,9 +11,7 @@ class User(cherry.Model):
     age: int = 18
     birthday: date = cherry.Field(default_factory=date.today)
 
-    class Meta:
-        database = db
-        tablename = "user"
+    cherry_config = cherry.CherryConfig(tablename="user", database=db)
 
 
 async def main():

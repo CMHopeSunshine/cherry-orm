@@ -10,9 +10,7 @@ class UserDetail(cherry.Model):
     email: str
     user: cherry.ForeignKey["User"]
 
-    class Meta:
-        database = db
-        tablename = "user_detail"
+    cherry_config = cherry.CherryConfig(tablename="user_detail", database=db)
 
 
 class User(cherry.Model):
@@ -20,6 +18,4 @@ class User(cherry.Model):
     name: str
     detail: cherry.ReverseRelation[UserDetail]
 
-    class Meta:
-        database = db
-        tablename = "user"
+    cherry_config = cherry.CherryConfig(tablename="user", database=db)

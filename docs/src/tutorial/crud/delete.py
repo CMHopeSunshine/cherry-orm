@@ -7,9 +7,7 @@ class User(cherry.Model):
     id: cherry.AutoIntPK = None
     name: str
 
-    class Meta:
-        database = db
-        tablename = "user"
+    cherry_config = cherry.CherryConfig(tablename="user", database=db)
 
 
 async def main():

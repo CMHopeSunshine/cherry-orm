@@ -2,7 +2,7 @@
 
 !!! note "Python 版本"
 
-    `Cherry-ORM` 只支持 Python 3.8+，请确保你的 Python 版本符合要求。
+    `Cherry-ORM` 只支持 Python 3.9+，请确保你的 Python 版本符合要求。
 
 ## 安装
 

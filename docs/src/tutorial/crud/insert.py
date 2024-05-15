@@ -8,9 +8,7 @@ class User(cherry.Model):
     name: str
     age: int = 18
 
-    class Meta:
-        database = db
-        tablename = "user"
+    cherry_config = cherry.CherryConfig(tablename="user", database=db)
 
 
 async def main():
