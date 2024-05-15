@@ -518,13 +518,13 @@ i18n = ["Babel (>=2.7)"]
 
 [[package]]
 name = "khemia"
-version = "0.1.0"
+version = "0.1.1"
 description = "Python tools for typing and memory cache."
 optional = false
-python-versions = ">=3.8,<4.0"
+python-versions = "<4.0,>=3.9"
 files = [
-    {file = "khemia-0.1.0-py3-none-any.whl", hash = "sha256:89a57aec2f1f6429a43629ffb8403cece3ad4800cf9f5b99c99970c0d068d203"},
-    {file = "khemia-0.1.0.tar.gz", hash = "sha256:8aec885bb569949398ed7daebf512ce28a135a71616092d85bda86314e576846"},
+    {file = "khemia-0.1.1-py3-none-any.whl", hash = "sha256:83d62764d2f3dad6e92e4359dcb61b45fe957bfa3177cdbbcc280b9b0c76986f"},
+    {file = "khemia-0.1.1.tar.gz", hash = "sha256:ef403944039387a88a9786da2fef99ed55a7e6978482b29817996906c2e493be"},
 ]
 
 [package.dependencies]
@@ -1459,4 +1459,4 @@ sqlite = ["aiosqlite"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "94378270a0cfedba4be2f35ba7c36bdbe6c820f95800d8455c859614d77b8e83"
+content-hash = "93ce92284d5e0bdcb6dae590274aa69a57ed096c1695249efa5997b4fd9cd91d"
