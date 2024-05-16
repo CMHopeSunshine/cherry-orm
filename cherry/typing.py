@@ -1,11 +1,7 @@
+from collections.abc import Mapping
 from typing import (
     Any,
-    Dict,
-    List,
     Literal,
-    Mapping,
-    Tuple,
-    Type,
     TYPE_CHECKING,
     TypeVar,
     Union,
@@ -36,9 +32,9 @@ T = TypeVar("T")
 Ts = TypeVarTuple("Ts")
 T_MODEL = TypeVar("T_MODEL", bound="Model")
 
-ModelType = Type["Model"]
-DictStrAny: TypeAlias = Dict[str, Any]
-TupleAny: TypeAlias = Tuple[Any, ...]
+ModelType = type["Model"]
+DictStrAny: TypeAlias = dict[str, Any]
+TupleAny: TypeAlias = tuple[Any, ...]
 AnyMapping: TypeAlias = Mapping[Any, Any]
-ClauseListType: TypeAlias = List[Union[BinaryExpression[bool], "ModelClause"]]
+ClauseListType: TypeAlias = list[Union[BinaryExpression[bool], "ModelClause"]]
 OptionalClause: TypeAlias = Union[BooleanClauseList, BinaryExpression, None]

@@ -54,9 +54,7 @@ class Student(cherry.Model):
     birthday: date = cherry.Field(default_factory=date.today)
     school: cherry.ForeignKey[Optional["School"]] = None
 
-    class Meta:
-        database = db
-        tablename = "student"
+    cherry_config = cherry.CherryConfig(tablename="student", database=db)
 
 
 class School(cherry.Model):
@@ -64,9 +62,7 @@ class School(cherry.Model):
     name: str = cherry.Field(unique=True, index=True)
     students: cherry.ReverseRelation[List[Student]] = []
 
-    class Meta:
-        database = db
-        tablename = "school"
+    cherry_config = cherry.CherryConfig(tablename="school", database=db)
 
 
 async def main():

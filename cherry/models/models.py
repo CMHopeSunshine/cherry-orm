@@ -95,16 +95,16 @@ class ModelMeta(ModelMetaclass):
             cls.__meta__.database = database
             if not abstract:
                 database.add_model(cls)
-        cls.__meta__.primary_key = tuple(
-            field_name
-            for field_name, field in cls.model_fields.items()
-            if isinstance(field, BaseField) and field.primary_key
-        )
+                cls.__meta__.primary_key = tuple(
+                    field_name
+                    for field_name, field in cls.model_fields.items()
+                    if isinstance(field, BaseField) and field.primary_key
+                )
 
-        if len(cls.__meta__.primary_key) == 0:
-            raise PrimaryKeyMissingError(
-                f"Model {cls} must have at least one primary key",
-            )
+                if len(cls.__meta__.primary_key) == 0:
+                    raise PrimaryKeyMissingError(
+                        f"Model {cls} must have at least one primary key",
+                    )
 
         return cls
 
