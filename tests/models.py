@@ -1,4 +1,4 @@
-from typing import Optional
+from __future__ import annotations
 
 import cherry
 from tests.database import database
@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 
 class User(cherry.Model):
-    id: Optional[int] = cherry.Field(default=None, primary_key=True, autoincrement=True)
+    id: int | None = cherry.Field(default=None, primary_key=True, autoincrement=True)
     name: str = cherry.Field(unique=True, max_length=30)
     introduce: str = cherry.Field(long_text=True)
     age: int = 18
@@ -19,7 +19,7 @@ class User(cherry.Model):
 class Student(cherry.Model):
     id: cherry.AutoIntPK = None
     name: str
-    school: cherry.ForeignKey[Optional["School"]] = None
+    school: School | None = cherry.Relationship(default=None, foreign_key=True)
 
     cherry_config = {"database": database}
 
@@ -27,14 +27,17 @@ class Student(cherry.Model):
 class School(cherry.Model):
     id: cherry.AutoIntPK = None
     name: str
-    students: cherry.ReverseRelation[list[Student]] = []
+    students: list[Student] = cherry.Relationship(
+        default_factory=list,
+        reverse_related=True,
+    )
 
     cherry_config = {"database": database}
 
 
 class Tag(cherry.Model):
     name: cherry.PrimaryKey[str]
-    posts: cherry.ManyToMany[list["Post"]] = []
+    posts: list[Post] = cherry.Relationship(default_factory=list, many_to_many=True)
 
     cherry_config = {"database": database}
 
@@ -42,7 +45,7 @@ class Tag(cherry.Model):
 class Post(cherry.Model):
     id: cherry.AutoIntPK = None
     title: str
-    tags: cherry.ManyToMany[list[Tag]] = []
+    tags: list[Tag] = cherry.Relationship(default_factory=list, many_to_many=True)
 
     cherry_config = {"database": database}
 
