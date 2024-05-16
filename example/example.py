@@ -1,5 +1,5 @@
 from datetime import date
-from typing import List, Optional
+from typing import Optional
 
 import cherry
 
@@ -13,19 +13,15 @@ class Student(cherry.Model):
     birthday: date = cherry.Field(default_factory=date.today)
     school: cherry.ForeignKey[Optional["School"]] = None
 
-    class Meta:
-        database = db
-        tablename = "student"
+    cherry_config = cherry.CherryConfig(tablename="student", database=db)
 
 
 class School(cherry.Model):
     id: cherry.PrimaryKey[int]
     name: str = cherry.Field(unique=True, index=True)
-    students: cherry.ReverseRelation[List[Student]] = []
+    students: cherry.ReverseRelation[list[Student]] = []
 
-    class Meta:
-        database = db
-        tablename = "school"
+    cherry_config = cherry.CherryConfig(tablename="school", database=db)
 
 
 async def main():
@@ -53,7 +49,7 @@ async def main():
     # Django 风格
     student2: Student = await Student.filter(name="student 2").get()
 
-    students: List[Student] = await Student.filter(Student.age >= 18).all()
+    students: list[Student] = await Student.filter(Student.age >= 18).all()
 
     # 聚合查询
     student_nums: int = await Student.filter(Student.age >= 18).count()
