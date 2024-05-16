@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cherry-orm"
-version = "1.0.0beta1"
+version = "1.0.0"
 description = "Python asynchronous ORM based on SQLAlchemy and Pydantic."
 authors = ["CMHopeSunshine <277073121@qq.com>"]
 license = "MIT"
