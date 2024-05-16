@@ -810,17 +810,17 @@ class Model(BaseModel, metaclass=ModelMeta):
                 elif isinstance(field_info, ForeignKeyField):
                     raise FieldTypeError(
                         f"Model {cls}'s ForeignKeyField {field_name} "
-                        "types must be a subclass of Cherry.Model",
+                        f"types must be a subclass of Cherry.Model, not {type(type_)}",
                     )
             elif isinstance(field_info, ManyToManyField):
                 raise FieldTypeError(
                     f"Model {cls}'s ManyToManyField {field_name} types"
-                    " must be a sequence type of Cherry.Model",
+                    f" must be a sequence type of Cherry.Model, not {type(type_)}",
                 )
             if not check_issubclass(type_, Model):
                 raise FieldTypeError(
                     f"Model {cls}'s RelationshipField {field_name} types"
-                    " must be a subclass of Cherry.Model",
+                    f" must be a subclass of Cherry.Model, not {type(type_)}",
                 )
             field_info.nullable = is_nullable
             field_info.related_model = type_
